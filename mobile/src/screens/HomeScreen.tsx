@@ -91,7 +91,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         activeOpacity={0.7}
         style={styles.versionContainer}
       >
-        <Text style={styles.version}>v1.0.1</Text>
+        <Text style={styles.version}>v1.0.2</Text>
       </TouchableOpacity>
     </View>
   );
@@ -113,12 +113,15 @@ const styles = StyleSheet.create({
   titleContainer: {
     alignItems: 'center',
     marginBottom: Spacing.xxl,
-    backgroundColor: 'rgba(10, 14, 26, 0.85)',
-    paddingHorizontal: Spacing.xl,
+    backgroundColor: 'rgba(10, 14, 26, 0.7)',
+    paddingHorizontal: Spacing.xl * 1.5,
     paddingVertical: Spacing.xl,
     borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 140, 66, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 30,
+    elevation: 10,
   },
   title: {
     fontSize: 48,
@@ -126,20 +129,12 @@ const styles = StyleSheet.create({
     color: Colors.text,
     textAlign: 'center',
     marginBottom: Spacing.md,
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-    }),
     letterSpacing: 2,
   },
   subtitle: {
     fontSize: FontSizes.lg,
     color: Colors.textSecondary,
     textAlign: 'center',
-    fontFamily: Platform.select({
-      ios: 'Menlo',
-      android: 'monospace',
-    }),
   },
   buttonContainer: {
     width: '100%',
