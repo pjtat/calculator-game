@@ -144,8 +144,8 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
       <View style={styles.buttonsContainer}>
         {/* Row 1: ←, Clear, ÷ */}
         <View style={styles.row}>
-          <Button value="←" onPress={handleBackspace} style={styles.clearButton} textStyle={styles.clearButtonText} />
-          <Button value="Clear" onPress={handleClear} style={styles.clearButton} textStyle={styles.clearButtonText} />
+          <Button value="←" onPress={handleBackspace} style={[styles.clearButton, styles.wideButton]} textStyle={styles.clearButtonText} />
+          <Button value="Clear" onPress={handleClear} style={[styles.clearButton, styles.wideButton]} textStyle={styles.clearButtonText} />
           <Button value="÷" onPress={() => handleOperationPress('/')} style={styles.operationButton} textStyle={styles.operationButtonText} />
         </View>
 
@@ -247,6 +247,9 @@ const styles = StyleSheet.create({
   clearButtonText: {
     color: Colors.text,
     fontSize: FontSizes.sm,
+  },
+  wideButton: {
+    flex: 1.5,
   },
   operationButton: {
     backgroundColor: Colors.primary + '20',

@@ -211,24 +211,6 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Scoreboard Header */}
-      <View style={styles.scoreboard}>
-        <Text style={styles.scoreboardTitle}>
-          Round {game.currentRound}
-          {game.config.gameMode === 'rounds' && ` / ${game.config.targetRounds}`}
-        </Text>
-        <ScrollView horizontal={true} showsHorizontalScrollIndicator={false} style={styles.scoresList}>
-          {Object.entries(game.players).map(([id, player]) => (
-            <View key={id} style={styles.scoreItem}>
-              <Text style={styles.scoreName} numberOfLines={1}>
-                {player.nickname}
-              </Text>
-              <Text style={styles.scoreValue}>{player.score}</Text>
-            </View>
-          ))}
-        </ScrollView>
-      </View>
-
       {/* Main Content */}
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         {game.status === 'question_entry' && isAsker && (
@@ -351,7 +333,7 @@ function GuessingView({
           </View>
 
           <TouchableOpacity style={styles.submitButton} onPress={onSubmit}>
-            <Text style={styles.submitButtonText}>Lock it in!</Text>
+            <Text style={styles.submitButtonText}>LOCK IT IN</Text>
           </TouchableOpacity>
         </>
       ) : (
@@ -477,36 +459,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: Spacing.md,
   },
-  scoreboard: {
-    backgroundColor: Colors.backgroundSecondary,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  scoreboardTitle: {
-    fontSize: FontSizes.md,
-    fontWeight: FontWeights.semibold,
-    color: Colors.text,
-    marginBottom: Spacing.sm,
-  },
-  scoresList: {
-    flexDirection: 'row',
-  },
-  scoreItem: {
-    marginRight: Spacing.md,
-    alignItems: 'center',
-  },
-  scoreName: {
-    fontSize: FontSizes.sm,
-    color: Colors.textSecondary,
-    maxWidth: 80,
-  },
-  scoreValue: {
-    fontSize: FontSizes.lg,
-    fontWeight: FontWeights.bold,
-    color: Colors.primary,
-  },
   content: {
     flex: 1,
   },
@@ -576,13 +528,13 @@ const styles = StyleSheet.create({
   unitsText: {
     fontSize: FontSizes.md,
     color: Colors.textSecondary,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.xl,
     textAlign: 'center',
     fontStyle: 'italic',
   },
   timerContainer: {
     alignItems: 'center',
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.xl,
   },
   submitButton: {
     backgroundColor: Colors.primary,
