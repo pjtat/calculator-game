@@ -538,11 +538,18 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     alignItems: 'center',
+    justifyContent: 'center',
     marginTop: Spacing.md,
-    paddingVertical: Spacing.sm,
+    alignSelf: 'center',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   submitButtonText: {
-    fontSize: 48,
+    fontSize: 40,
   },
   submittedContainer: {
     alignItems: 'center',
