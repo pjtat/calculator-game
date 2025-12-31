@@ -85,6 +85,17 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
     }
   };
 
+  const handleDecimal = () => {
+    if (disabled) return;
+
+    if (shouldResetDisplay) {
+      setDisplay('0.');
+      setShouldResetDisplay(false);
+    } else if (!display.includes('.')) {
+      setDisplay(display + '.');
+    }
+  };
+
   const calculate = (prev: number, current: number, op: string): number => {
     switch (op) {
       case '+':
@@ -131,41 +142,41 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
 
       {/* Calculator Buttons */}
       <View style={styles.buttonsContainer}>
-        {/* Row 1: Clear, ÷, × */}
+        {/* Row 1: ←, Clear, ÷ */}
         <View style={styles.row}>
+          <Button value="←" onPress={handleBackspace} style={styles.clearButton} textStyle={styles.clearButtonText} />
           <Button value="Clear" onPress={handleClear} style={styles.clearButton} textStyle={styles.clearButtonText} />
           <Button value="÷" onPress={() => handleOperationPress('/')} style={styles.operationButton} textStyle={styles.operationButtonText} />
-          <Button value="×" onPress={() => handleOperationPress('*')} style={styles.operationButton} textStyle={styles.operationButtonText} />
         </View>
 
-        {/* Row 2: 7, 8, 9, - */}
+        {/* Row 2: 7, 8, 9, × */}
         <View style={styles.row}>
           <Button value="7" onPress={() => handleNumberPress('7')} />
           <Button value="8" onPress={() => handleNumberPress('8')} />
           <Button value="9" onPress={() => handleNumberPress('9')} />
-          <Button value="-" onPress={() => handleOperationPress('-')} style={styles.operationButton} textStyle={styles.operationButtonText} />
+          <Button value="×" onPress={() => handleOperationPress('*')} style={styles.operationButton} textStyle={styles.operationButtonText} />
         </View>
 
-        {/* Row 3: 4, 5, 6, + */}
+        {/* Row 3: 4, 5, 6, - */}
         <View style={styles.row}>
           <Button value="4" onPress={() => handleNumberPress('4')} />
           <Button value="5" onPress={() => handleNumberPress('5')} />
           <Button value="6" onPress={() => handleNumberPress('6')} />
-          <Button value="+" onPress={() => handleOperationPress('+')} style={styles.operationButton} textStyle={styles.operationButtonText} />
+          <Button value="-" onPress={() => handleOperationPress('-')} style={styles.operationButton} textStyle={styles.operationButtonText} />
         </View>
 
-        {/* Row 4: 1, 2, 3, = */}
+        {/* Row 4: 1, 2, 3, + */}
         <View style={styles.row}>
           <Button value="1" onPress={() => handleNumberPress('1')} />
           <Button value="2" onPress={() => handleNumberPress('2')} />
           <Button value="3" onPress={() => handleNumberPress('3')} />
-          <Button value="=" onPress={handleEquals} style={styles.operationButton} textStyle={styles.operationButtonText} />
+          <Button value="+" onPress={() => handleOperationPress('+')} style={styles.operationButton} textStyle={styles.operationButtonText} />
         </View>
 
-        {/* Row 5: 0 (wide), = */}
+        {/* Row 5: 0 (wide), ., = */}
         <View style={styles.row}>
           <Button value="0" onPress={() => handleNumberPress('0')} style={styles.zeroButton} />
-          <View style={styles.button} />
+          <Button value="." onPress={handleDecimal} />
           <Button value="=" onPress={handleEquals} style={styles.equalsButton} textStyle={styles.equalsButtonText} />
         </View>
       </View>
@@ -176,47 +187,47 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
 const styles = StyleSheet.create({
   container: {
     backgroundColor: Colors.backgroundSecondary,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.xs,
     borderWidth: 1,
     borderColor: Colors.border,
   },
   historyContainer: {
-    minHeight: 20,
+    minHeight: 16,
     marginBottom: Spacing.xs,
   },
   historyText: {
-    fontSize: FontSizes.xs,
+    fontSize: 10,
     color: Colors.textSecondary,
     textAlign: 'right',
   },
   displayContainer: {
     backgroundColor: Colors.background,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.sm,
-    marginBottom: Spacing.sm,
-    minHeight: 50,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.xs,
+    marginBottom: Spacing.xs,
+    minHeight: 40,
     justifyContent: 'center',
   },
   displayText: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: FontWeights.bold,
     color: Colors.text,
     textAlign: 'right',
   },
   buttonsContainer: {
-    gap: Spacing.xs,
+    gap: 6,
   },
   row: {
     flexDirection: 'row',
-    gap: Spacing.xs,
+    gap: 6,
   },
   button: {
     flex: 1,
     aspectRatio: 1,
-    maxHeight: 60,
+    maxHeight: 52,
     backgroundColor: Colors.background,
-    borderRadius: BorderRadius.md,
+    borderRadius: BorderRadius.sm,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -235,7 +246,7 @@ const styles = StyleSheet.create({
   },
   clearButtonText: {
     color: Colors.text,
-    fontSize: FontSizes.md,
+    fontSize: FontSizes.sm,
   },
   operationButton: {
     backgroundColor: Colors.primary + '20',
