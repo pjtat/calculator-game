@@ -103,7 +103,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         style={styles.versionContainer}
       >
         <Text style={styles.version}>
-          v1.0.5 {tapCount > 0 && `(${tapCount}/3)`}
+          v1.0.6 {tapCount > 0 && `(${tapCount}/3)`}
         </Text>
       </TouchableOpacity>
     </View>
@@ -179,6 +179,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: Spacing.xxl,
     alignSelf: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    minWidth: 100,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
   },
   version: {
     fontSize: FontSizes.sm,
