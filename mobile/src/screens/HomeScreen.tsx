@@ -28,6 +28,8 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     const newCount = tapCount + 1;
     setTapCount(newCount);
 
+    console.log('Version tap count:', newCount);
+
     if (newCount === 3) {
       // Activate demo mode
       setTapCount(0);
@@ -35,7 +37,11 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         'Demo Mode',
         'Start a demo with mock players?',
         [
-          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: () => setTapCount(0),
+          },
           {
             text: 'Start Demo',
             onPress: () => {
@@ -49,10 +55,11 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         ]
       );
     } else {
-      // Reset count after 1 second if not reached 3
+      // Reset count after 2.5 seconds if not reached 3
       tapTimeoutRef.current = setTimeout(() => {
+        console.log('Resetting tap count');
         setTapCount(0);
-      }, 1000);
+      }, 2500);
     }
   };
 
@@ -95,7 +102,9 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         activeOpacity={0.7}
         style={styles.versionContainer}
       >
-        <Text style={styles.version}>v1.0.4</Text>
+        <Text style={styles.version}>
+          v1.0.5 {tapCount > 0 && `(${tapCount}/3)`}
+        </Text>
       </TouchableOpacity>
     </View>
   );
