@@ -9,7 +9,11 @@ type HomeScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
 };
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+
+// Responsive font sizes based on screen width
+const TITLE_FONT_SIZE = Math.min(width * 0.11, 42);
+const SUBTITLE_FONT_SIZE = Math.min(width * 0.045, 18);
 
 export default function HomeScreen({ navigation }: HomeScreenProps) {
   const [tapCount, setTapCount] = useState(0);
@@ -91,7 +95,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         activeOpacity={0.7}
         style={styles.versionContainer}
       >
-        <Text style={styles.version}>v1.0.3</Text>
+        <Text style={styles.version}>v1.0.4</Text>
       </TouchableOpacity>
     </View>
   );
@@ -114,25 +118,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: Spacing.xxl,
     backgroundColor: 'rgba(10, 14, 26, 0.7)',
-    paddingHorizontal: Spacing.xl * 1.5,
-    paddingVertical: Spacing.xl,
+    paddingHorizontal: Math.max(Spacing.lg, width * 0.08),
+    paddingVertical: Spacing.lg,
     borderRadius: BorderRadius.lg,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 30,
     elevation: 10,
+    maxWidth: width * 0.9,
   },
   title: {
-    fontSize: 48,
+    fontSize: TITLE_FONT_SIZE,
     color: Colors.text,
     textAlign: 'center',
     marginBottom: Spacing.md,
-    letterSpacing: 2,
+    letterSpacing: 1,
     fontFamily: 'Orbitron_900Black',
   },
   subtitle: {
-    fontSize: FontSizes.lg,
+    fontSize: SUBTITLE_FONT_SIZE,
     color: Colors.textSecondary,
     textAlign: 'center',
     fontFamily: 'Orbitron_700Bold',
