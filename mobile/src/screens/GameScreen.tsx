@@ -537,16 +537,12 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   submitButton: {
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.full,
-    paddingVertical: Spacing.md,
     alignItems: 'center',
     marginTop: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
   submitButtonText: {
-    fontSize: FontSizes.lg,
-    fontWeight: FontWeights.semibold,
-    color: Colors.primaryForeground,
+    fontSize: 48,
   },
   submittedContainer: {
     alignItems: 'center',
