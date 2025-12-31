@@ -150,7 +150,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
 
   const handleSubmitGuess = async () => {
     if (guessValue === null) {
-      Alert.alert('No Calculation', 'Please complete a calculation before submitting.');
+      Alert.alert('No Number Entered', 'Please enter a number before submitting.');
       return;
     }
 
@@ -208,12 +208,13 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
   }
 
   const isAsker = game.currentQuestion?.askedBy === playerId;
+  const isNextAsker = game.nextAsker === playerId;
 
   return (
     <SafeAreaView style={styles.container}>
       {/* Main Content */}
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        {game.status === 'question_entry' && isAsker && (
+        {game.status === 'question_entry' && isNextAsker && (
           <QuestionEntryView
             questionText={questionText}
             setQuestionText={setQuestionText}
@@ -222,7 +223,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
           />
         )}
 
-        {game.status === 'question_entry' && !isAsker && (
+        {game.status === 'question_entry' && !isNextAsker && (
           <WaitingForQuestionView askerName={game.players[game.nextAsker]?.nickname || 'Player'} />
         )}
 
@@ -230,6 +231,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
           <GuessingView
             question={game.currentQuestion?.text || ''}
             units={game.currentQuestion?.units}
+            askerName={game.players[game.currentQuestion?.askedBy || '']?.nickname || 'Unknown'}
             duration={game.config.timerDuration}
             hasSubmitted={hasSubmittedGuess}
             onCalculationChange={handleCalculationChange}
@@ -259,7 +261,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
       </ScrollView>
 
       {/* Demo Controls */}
-      <DemoControls gameCode={gameCode} />
+      <DemoControls gameCode={gameCode} navigation={navigation} />
     </SafeAreaView>
   );
 }
@@ -301,7 +303,7 @@ function QuestionEntryView({ questionText, setQuestionText, isValidating, onVali
 
 function WaitingForQuestionView({ askerName }: any) {
   return (
-    <View style={styles.phaseContainer}>
+    <View style={styles.centeredContainer}>
       <ActivityIndicator size="large" color={Colors.primary} />
       <Text style={styles.waitingText}>Waiting for {askerName} to ask a question...</Text>
     </View>
@@ -311,6 +313,7 @@ function WaitingForQuestionView({ askerName }: any) {
 function GuessingView({
   question,
   units,
+  askerName,
   duration,
   hasSubmitted,
   onCalculationChange,
@@ -320,7 +323,9 @@ function GuessingView({
   return (
     <View style={styles.guessingContainer}>
       <Text style={styles.questionText}>{question}</Text>
-      {units && <Text style={styles.unitsText}>{units}</Text>}
+      <Text style={styles.unitsText}>
+        {units || 'Number'} | {askerName}
+      </Text>
 
       <View style={styles.divider} />
 
@@ -341,7 +346,6 @@ function GuessingView({
       ) : (
         <View style={styles.submittedContainer}>
           <Text style={styles.submittedText}>✓ Guess submitted</Text>
-          <ActivityIndicator size="large" color={Colors.primary} style={styles.submittedSpinner} />
           <Text style={styles.submittedSubtext}>Waiting for other players...</Text>
         </View>
       )}
@@ -471,6 +475,11 @@ const styles = StyleSheet.create({
   phaseContainer: {
     flex: 1,
   },
+  centeredContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   guessingContainer: {
     paddingBottom: Spacing.xl,
   },
@@ -530,9 +539,8 @@ const styles = StyleSheet.create({
   unitsText: {
     fontSize: FontSizes.md,
     color: Colors.textSecondary,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.sm,
     textAlign: 'center',
-    fontStyle: 'italic',
   },
   divider: {
     height: 1,
@@ -570,9 +578,6 @@ const styles = StyleSheet.create({
     fontWeight: FontWeights.bold,
     color: Colors.primary,
     marginBottom: Spacing.lg,
-  },
-  submittedSpinner: {
-    marginVertical: Spacing.xl,
   },
   submittedSubtext: {
     fontSize: FontSizes.md,

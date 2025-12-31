@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '../../constants/theme';
 
@@ -8,12 +8,26 @@ interface CalculatorProps {
 }
 
 export default function Calculator({ onCalculationChange, disabled = false }: CalculatorProps) {
-  const [displayValue, setDisplayValue] = useState('0');
+  const [displayValue, setDisplayValue] = useState('');
   const [previousValue, setPreviousValue] = useState<number | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
   const [shouldResetDisplay, setShouldResetDisplay] = useState(false);
 
+  // Notify parent of current display value whenever it changes
+  useEffect(() => {
+    const cleanValue = displayValue.replace(/,/g, '');
+    const numValue = parseFloat(cleanValue);
+    if (!isNaN(numValue)) {
+      onCalculationChange(numValue, cleanValue);
+    } else if (cleanValue === '') {
+      onCalculationChange(null, '');
+    }
+  }, [displayValue]);
+
   const formatNumber = (num: string): string => {
+    // Handle empty string
+    if (num === '') return '';
+
     // Remove existing commas
     const cleanNum = num.replace(/,/g, '');
 
@@ -26,7 +40,7 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
 
     // Format integer
     const numVal = parseFloat(cleanNum);
-    if (isNaN(numVal)) return '0';
+    if (isNaN(numVal)) return '';
     return numVal.toLocaleString('en-US');
   };
 
@@ -47,7 +61,7 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
       setShouldResetDisplay(false);
     } else {
       const cleanValue = displayValue.replace(/,/g, '');
-      setDisplayValue(cleanValue === '0' ? num : cleanValue + num);
+      setDisplayValue(cleanValue === '0' || cleanValue === '' ? num : cleanValue + num);
     }
   };
 
@@ -60,10 +74,10 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
       // Perform the pending operation
       const result = calculate(previousValue, currentValue, operation);
       setPreviousValue(result);
-      setDisplayValue('0');
+      setDisplayValue('');
     } else {
       setPreviousValue(currentValue);
-      setDisplayValue('0');
+      setDisplayValue('');
     }
 
     setOperation(op);
@@ -91,7 +105,7 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
   const handleClear = () => {
     if (disabled) return;
 
-    setDisplayValue('0');
+    setDisplayValue('');
     setPreviousValue(null);
     setOperation(null);
     setShouldResetDisplay(false);
@@ -105,7 +119,7 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
     if (cleanValue.length > 1) {
       setDisplayValue(cleanValue.slice(0, -1));
     } else {
-      setDisplayValue('0');
+      setDisplayValue('');
     }
   };
 
@@ -118,6 +132,16 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
       setShouldResetDisplay(false);
     } else if (!cleanValue.includes('.')) {
       setDisplayValue(cleanValue + '.');
+    }
+  };
+
+  const handleToggleSign = () => {
+    if (disabled) return;
+
+    const cleanValue = displayValue.replace(/,/g, '');
+    const numValue = parseFloat(cleanValue);
+    if (!isNaN(numValue) && numValue !== 0) {
+      setDisplayValue((numValue * -1).toString());
     }
   };
 
@@ -162,7 +186,7 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
         <View style={styles.row}>
           <Button value="←" onPress={handleBackspace} style={[styles.clearButton, styles.wideButton]} textStyle={styles.clearButtonText} />
           <Button value="Clear" onPress={handleClear} style={[styles.clearButton, styles.wideButton]} textStyle={styles.clearButtonText} />
-          <Button value="÷" onPress={() => handleOperationPress('/')} style={styles.operationButton} textStyle={styles.operationButtonText} />
+          <Button value="÷" onPress={() => handleOperationPress('/')} style={[styles.operationButton, styles.divideButton]} textStyle={styles.operationButtonText} />
         </View>
 
         {/* Row 2: 7, 8, 9, × */}
@@ -189,10 +213,11 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
           <Button value="+" onPress={() => handleOperationPress('+')} style={styles.operationButton} textStyle={styles.operationButtonText} />
         </View>
 
-        {/* Row 5: 0 (wide), ., = */}
+        {/* Row 5: +/-, 0, ., = */}
         <View style={styles.row}>
-          <Button value="0" onPress={() => handleNumberPress('0')} style={styles.zeroButton} />
-          <Button value="." onPress={handleDecimal} />
+          <Button value="+/−" onPress={handleToggleSign} style={styles.clearButton} textStyle={styles.clearButtonText} />
+          <Button value="0" onPress={() => handleNumberPress('0')} />
+          <Button value="." onPress={handleDecimal} style={styles.clearButton} textStyle={styles.clearButtonText} />
           <Button value="=" onPress={handleEquals} style={styles.equalsButton} textStyle={styles.equalsButtonText} />
         </View>
       </View>
@@ -205,6 +230,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: BorderRadius.md,
     padding: Spacing.xs,
+    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.md,
     borderWidth: 1,
     borderColor: Colors.border,
   },
@@ -212,7 +239,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderRadius: BorderRadius.sm,
     padding: Spacing.xs,
-    marginBottom: Spacing.xs,
+    paddingRight: Spacing.md,
+    marginBottom: Spacing.md,
     minHeight: 40,
     justifyContent: 'center',
   },
@@ -224,6 +252,7 @@ const styles = StyleSheet.create({
   },
   buttonsContainer: {
     gap: 10,
+    paddingBottom: Spacing.sm,
   },
   row: {
     flexDirection: 'row',
@@ -249,7 +278,7 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   clearButton: {
-    backgroundColor: Colors.backgroundSecondary,
+    backgroundColor: 'rgba(60, 64, 76, 1)',
   },
   clearButtonText: {
     color: Colors.text,
@@ -259,18 +288,19 @@ const styles = StyleSheet.create({
     flex: 1.5,
   },
   operationButton: {
+    flex: 1,
     backgroundColor: Colors.primary + '20',
   },
   operationButtonText: {
     color: Colors.primary,
+  },
+  divideButton: {
+    flex: 0.9,
   },
   equalsButton: {
     backgroundColor: Colors.primary,
   },
   equalsButtonText: {
     color: Colors.primaryForeground,
-  },
-  zeroButton: {
-    flex: 2,
   },
 });

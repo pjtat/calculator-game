@@ -20,8 +20,10 @@ type CreateGameScreenProps = {
 
 export default function CreateGameScreen({ navigation }: CreateGameScreenProps) {
   const [nickname, setNickname] = useState('');
-  const [gameMode, setGameMode] = useState<'rounds' | 'score'>('rounds');
-  const [targetValue, setTargetValue] = useState('10');
+  const [roundsOption, setRoundsOption] = useState<'10' | '20' | 'custom'>('10');
+  const [customRounds, setCustomRounds] = useState('');
+  const [scoreOption, setScoreOption] = useState<'5' | '10' | 'custom'>('10');
+  const [customScore, setCustomScore] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleCreateGame = async () => {
@@ -36,9 +38,17 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
       return;
     }
 
-    const targetNum = parseInt(targetValue);
-    if (isNaN(targetNum) || targetNum < 1 || targetNum > 99) {
-      Alert.alert('Invalid Target', 'Please enter a number between 1 and 99.');
+    // Get rounds value
+    const roundsValue = roundsOption === 'custom' ? parseInt(customRounds) : parseInt(roundsOption);
+    if (isNaN(roundsValue) || roundsValue < 1 || roundsValue > 99) {
+      Alert.alert('Invalid Rounds', 'Please enter a valid number of rounds (1-99).');
+      return;
+    }
+
+    // Get score value
+    const scoreValue = scoreOption === 'custom' ? parseInt(customScore) : parseInt(scoreOption);
+    if (isNaN(scoreValue) || scoreValue < 1 || scoreValue > 99) {
+      Alert.alert('Invalid Score', 'Please enter a valid score target (1-99).');
       return;
     }
 
@@ -48,8 +58,8 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
       // Sign in anonymously first
       const playerId = await signInAnonymous();
 
-      // Create the game
-      const gameCode = await createGame(playerId, nickname.trim(), gameMode, targetNum);
+      // Create the game with rounds mode (both values are stored but rounds mode is used)
+      const gameCode = await createGame(playerId, nickname.trim(), 'rounds', roundsValue);
 
       // Navigate to lobby
       navigation.replace('Lobby', { gameCode, playerId });
@@ -65,7 +75,6 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Create Game</Text>
-        <Text style={styles.subtitle}>Set up your multiplayer game</Text>
       </View>
 
       {/* Nickname Input */}
@@ -81,61 +90,120 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
           autoCapitalize="words"
           autoCorrect={false}
         />
-        <Text style={styles.hint}>2-15 characters</Text>
       </View>
 
-      {/* Game Mode Selection */}
+      {/* Rounds Selection */}
       <View style={styles.section}>
-        <Text style={styles.label}>Game Mode</Text>
-        <View style={styles.toggleContainer}>
+        <Text style={styles.label}>Rounds</Text>
+        <View style={styles.optionsContainer}>
           <TouchableOpacity
-            style={[styles.toggleButton, gameMode === 'rounds' && styles.toggleButtonActive]}
-            onPress={() => setGameMode('rounds')}
+            style={[styles.optionButton, roundsOption === '10' && styles.optionButtonActive]}
+            onPress={() => setRoundsOption('10')}
           >
             <Text
               style={[
-                styles.toggleButtonText,
-                gameMode === 'rounds' && styles.toggleButtonTextActive,
+                styles.optionButtonText,
+                roundsOption === '10' && styles.optionButtonTextActive,
               ]}
             >
-              Rounds
+              10
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.toggleButton, gameMode === 'score' && styles.toggleButtonActive]}
-            onPress={() => setGameMode('score')}
+            style={[styles.optionButton, roundsOption === '20' && styles.optionButtonActive]}
+            onPress={() => setRoundsOption('20')}
           >
             <Text
               style={[
-                styles.toggleButtonText,
-                gameMode === 'score' && styles.toggleButtonTextActive,
+                styles.optionButtonText,
+                roundsOption === '20' && styles.optionButtonTextActive,
               ]}
             >
-              Score Target
+              20
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.optionButton, roundsOption === 'custom' && styles.optionButtonActive]}
+            onPress={() => setRoundsOption('custom')}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                roundsOption === 'custom' && styles.optionButtonTextActive,
+              ]}
+            >
+              Custom
             </Text>
           </TouchableOpacity>
         </View>
+        {roundsOption === 'custom' && (
+          <TextInput
+            style={[styles.input, styles.customInput]}
+            placeholder="Enter number of rounds"
+            placeholderTextColor={Colors.textSecondary}
+            value={customRounds}
+            onChangeText={setCustomRounds}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+        )}
       </View>
 
-      {/* Target Value Input */}
+      {/* Score Target Selection */}
       <View style={styles.section}>
-        <Text style={styles.label}>
-          {gameMode === 'rounds' ? 'Number of Rounds' : 'Target Score'}
-        </Text>
-        <TextInput
-          style={styles.input}
-          placeholder={gameMode === 'rounds' ? 'e.g., 10' : 'e.g., 10'}
-          placeholderTextColor={Colors.textSecondary}
-          value={targetValue}
-          onChangeText={setTargetValue}
-          keyboardType="number-pad"
-          maxLength={2}
-        />
-        <Text style={styles.hint}>
-          {gameMode === 'rounds'
-            ? 'Play for this many rounds'
-            : 'First player to reach this score wins'}
-        </Text>
+        <Text style={styles.label}>Score Target</Text>
+        <View style={styles.optionsContainer}>
+          <TouchableOpacity
+            style={[styles.optionButton, scoreOption === '5' && styles.optionButtonActive]}
+            onPress={() => setScoreOption('5')}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                scoreOption === '5' && styles.optionButtonTextActive,
+              ]}
+            >
+              5
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.optionButton, scoreOption === '10' && styles.optionButtonActive]}
+            onPress={() => setScoreOption('10')}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                scoreOption === '10' && styles.optionButtonTextActive,
+              ]}
+            >
+              10
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.optionButton, scoreOption === 'custom' && styles.optionButtonActive]}
+            onPress={() => setScoreOption('custom')}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                scoreOption === 'custom' && styles.optionButtonTextActive,
+              ]}
+            >
+              Custom
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {scoreOption === 'custom' && (
+          <TextInput
+            style={[styles.input, styles.customInput]}
+            placeholder="Enter score target"
+            placeholderTextColor={Colors.textSecondary}
+            value={customScore}
+            onChangeText={setCustomScore}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+        )}
       </View>
 
       {/* Create Button */}
@@ -182,10 +250,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: Spacing.sm,
   },
-  subtitle: {
-    fontSize: FontSizes.md,
-    color: Colors.textSecondary,
-  },
   section: {
     marginBottom: Spacing.xl,
   },
@@ -204,16 +268,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  hint: {
-    fontSize: FontSizes.sm,
-    color: Colors.textSecondary,
-    marginTop: Spacing.xs,
+  customInput: {
+    marginTop: Spacing.sm,
   },
-  toggleContainer: {
+  optionsContainer: {
     flexDirection: 'row',
     gap: Spacing.sm,
   },
-  toggleButton: {
+  optionButton: {
     flex: 1,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.lg,
@@ -223,16 +285,16 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     alignItems: 'center',
   },
-  toggleButtonActive: {
+  optionButtonActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
   },
-  toggleButtonText: {
+  optionButtonText: {
     fontSize: FontSizes.md,
     fontWeight: FontWeights.medium,
     color: Colors.textSecondary,
   },
-  toggleButtonTextActive: {
+  optionButtonTextActive: {
     color: Colors.primaryForeground,
   },
   createButton: {

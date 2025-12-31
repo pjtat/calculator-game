@@ -1,20 +1,30 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, Auth } from 'firebase/auth';
 import { getDatabase, ref, set, get, onValue, off, push, update, Database } from 'firebase/database';
+import Constants from 'expo-constants';
 import { Game, Player, Guess, CurrentQuestion, RoundResult } from '../types/game';
-import { ENV } from '../config/env';
-import { DEMO_GAME_CODE, getDemoGame, getDemoGameQuestionEntry, getDemoGameGuessing, getDemoGameResults } from './demoData';
+import {
+  DEMO_GAME_CODE,
+  getDemoGame,
+  getDemoGameQuestionEntry,
+  getDemoGameWaitingForQuestion,
+  getDemoGameGuessing,
+  getDemoGameAskerWaiting,
+  getDemoGameResults,
+  getDemoGameEnd,
+} from './demoData';
 
 // Demo mode state
 let demoGameState: Game = getDemoGame('waiting');
 let demoGameListeners: Array<(game: Game) => void> = [];
 
-// Firebase configuration from environment variables
+// Firebase configuration from app.config.ts extra
+const extra = Constants.expoConfig?.extra;
 const firebaseConfig = {
-  apiKey: ENV.FIREBASE_API_KEY,
-  authDomain: ENV.FIREBASE_AUTH_DOMAIN,
-  databaseURL: ENV.FIREBASE_DATABASE_URL,
-  projectId: ENV.FIREBASE_PROJECT_ID,
+  apiKey: extra?.firebaseApiKey,
+  authDomain: extra?.firebaseAuthDomain,
+  databaseURL: extra?.firebaseDatabaseUrl,
+  projectId: extra?.firebaseProjectId,
 };
 
 // Initialize Firebase
@@ -403,6 +413,59 @@ export const advanceDemoMode = () => {
       break;
     case 'results':
       updateDemoGame(getDemoGameQuestionEntry());
+      break;
+    default:
+      updateDemoGame(getDemoGame('waiting'));
+  }
+};
+
+// Demo screen options for the screen selector
+export type DemoScreen =
+  | 'create_game'
+  | 'join_game'
+  | 'lobby'
+  | 'question_entry'
+  | 'waiting_for_question'
+  | 'guessing'
+  | 'asker_waiting'
+  | 'results'
+  | 'game_end';
+
+export const DEMO_SCREENS: { key: DemoScreen; label: string; isNavigation?: boolean }[] = [
+  { key: 'create_game', label: 'Create Game', isNavigation: true },
+  { key: 'join_game', label: 'Join Game', isNavigation: true },
+  { key: 'lobby', label: 'Lobby (Waiting)' },
+  { key: 'question_entry', label: 'Ask a Question' },
+  { key: 'waiting_for_question', label: 'Waiting for Question' },
+  { key: 'guessing', label: 'Guessing Screen' },
+  { key: 'asker_waiting', label: 'Asker Waiting' },
+  { key: 'results', label: 'Round Results' },
+  { key: 'game_end', label: 'Game End' },
+];
+
+// Set demo mode to a specific screen
+export const setDemoScreen = (screen: DemoScreen) => {
+  switch (screen) {
+    case 'lobby':
+      updateDemoGame(getDemoGame('waiting'));
+      break;
+    case 'question_entry':
+      updateDemoGame(getDemoGameQuestionEntry());
+      break;
+    case 'waiting_for_question':
+      updateDemoGame(getDemoGameWaitingForQuestion());
+      break;
+    case 'guessing':
+      updateDemoGame(getDemoGameGuessing());
+      break;
+    case 'asker_waiting':
+      updateDemoGame(getDemoGameAskerWaiting());
+      break;
+    case 'results':
+      updateDemoGame(getDemoGameResults());
+      break;
+    case 'game_end':
+      updateDemoGame(getDemoGameEnd());
       break;
     default:
       updateDemoGame(getDemoGame('waiting'));
