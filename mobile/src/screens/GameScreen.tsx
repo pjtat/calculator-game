@@ -322,6 +322,8 @@ function GuessingView({
       <Text style={styles.questionText}>{question}</Text>
       {units && <Text style={styles.unitsText}>{units}</Text>}
 
+      <View style={styles.divider} />
+
       <View style={styles.timerContainer}>
         <Timer duration={duration} onExpire={onTimerExpire} />
       </View>
@@ -531,6 +533,12 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
     textAlign: 'center',
     fontStyle: 'italic',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginVertical: Spacing.md,
+    width: '100%',
   },
   timerContainer: {
     alignItems: 'center',
