@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import NumericRain from '../components/NumericRain';
@@ -12,6 +12,46 @@ type HomeScreenProps = {
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen({ navigation }: HomeScreenProps) {
+  const [tapCount, setTapCount] = useState(0);
+  const tapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleVersionTap = () => {
+    // Clear existing timeout
+    if (tapTimeoutRef.current) {
+      clearTimeout(tapTimeoutRef.current);
+    }
+
+    const newCount = tapCount + 1;
+    setTapCount(newCount);
+
+    if (newCount === 3) {
+      // Activate demo mode
+      setTapCount(0);
+      Alert.alert(
+        'Demo Mode',
+        'Start a demo with mock players?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Start Demo',
+            onPress: () => {
+              // Navigate to lobby with demo game
+              navigation.navigate('Lobby', {
+                gameCode: 'DEMO01',
+                playerId: 'demo-player-1',
+              });
+            },
+          },
+        ]
+      );
+    } else {
+      // Reset count after 1 second if not reached 3
+      tapTimeoutRef.current = setTimeout(() => {
+        setTapCount(0);
+      }, 1000);
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Numeric Rain Background */}
@@ -21,7 +61,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       <View style={styles.content}>
         {/* Title */}
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>Calculator Game 🧮</Text>
+          <Text style={styles.title}>Calculator Game</Text>
           <Text style={styles.subtitle}>Multiplayer estimation trivia</Text>
         </View>
 
@@ -43,10 +83,16 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
             <Text style={styles.buttonText}>Join Game</Text>
           </TouchableOpacity>
         </View>
-
-        {/* Version */}
-        <Text style={styles.version}>v1.0.0</Text>
       </View>
+
+      {/* Version - tap 3x for demo mode */}
+      <TouchableOpacity
+        onPress={handleVersionTap}
+        activeOpacity={0.7}
+        style={styles.versionContainer}
+      >
+        <Text style={styles.version}>v1.0.0</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -104,9 +150,12 @@ const styles = StyleSheet.create({
     fontWeight: FontWeights.semibold,
     color: Colors.primaryForeground,
   },
-  version: {
+  versionContainer: {
     position: 'absolute',
     bottom: Spacing.xxl,
+    alignSelf: 'center',
+  },
+  version: {
     fontSize: FontSizes.sm,
     color: Colors.textSecondary,
   },

@@ -24,6 +24,7 @@ import { validateQuestion } from '../services/gemini';
 import { Game, RoundRanking } from '../types/game';
 import Calculator from '../components/Calculator';
 import Timer from '../components/Timer';
+import DemoControls from '../components/DemoControls';
 
 type GameScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Game'>;
@@ -268,6 +269,9 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
           />
         )}
       </ScrollView>
+
+      {/* Demo Controls */}
+      <DemoControls gameCode={gameCode} />
     </View>
   );
 }

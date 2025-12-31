@@ -1,86 +1,139 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Dimensions, StyleSheet } from 'react-native';
-import Svg, { Text as SvgText } from 'react-native-svg';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { Colors } from '../../constants/theme';
 
-const { width, height } = Dimensions.get('window');
+const FONT_SIZE = 12;
+const TRAIL_LENGTH = 20;
+const REGULAR_CHARS = ['0', '1'];
+const TICK_INTERVAL = 80;
 
-interface RainDrop {
+interface Column {
+  id: number;
   x: number;
-  y: Animated.Value;
-  char: string;
-  isEasterEgg: boolean;
+  headPosition: number;
+  chars: string[];
   speed: number;
 }
 
-const EASTER_EGGS = ['6.9', '8.0085', '420', '69', '42'];
-const REGULAR_CHARS = ['0', '1'];
-const NUM_DROPS = 30; // Number of falling numbers
-const FONT_SIZE = 14;
+function getRandomChar(): string {
+  return REGULAR_CHARS[Math.floor(Math.random() * REGULAR_CHARS.length)];
+}
 
 export default function NumericRain() {
-  const dropsRef = useRef<RainDrop[]>([]);
+  const { width, height } = useWindowDimensions();
+  const [columns, setColumns] = useState<Column[]>([]);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const tickRef = useRef(0);
 
+  // Initialize columns
   useEffect(() => {
-    // Initialize drops
-    dropsRef.current = Array.from({ length: NUM_DROPS }, () => {
-      const isEasterEgg = Math.random() > 0.95; // 5% chance
+    if (width === 0) return;
+
+    const numColumns = Math.floor(width / FONT_SIZE);
+    const newColumns: Column[] = Array.from({ length: numColumns }, (_, i) => {
       return {
-        x: Math.random() * width,
-        y: new Animated.Value(-Math.random() * height),
-        char: isEasterEgg
-          ? EASTER_EGGS[Math.floor(Math.random() * EASTER_EGGS.length)]
-          : REGULAR_CHARS[Math.floor(Math.random() * REGULAR_CHARS.length)],
-        isEasterEgg,
-        speed: 2000 + Math.random() * 3000, // Random speed between 2-5 seconds
+        id: i,
+        x: i * FONT_SIZE,
+        headPosition: Math.floor(Math.random() * -30),
+        chars: Array.from({ length: TRAIL_LENGTH }, () => getRandomChar()),
+        speed: Math.floor(Math.random() * 3) + 1,
       };
     });
 
-    // Animate each drop
-    const animations = dropsRef.current.map((drop) => {
-      const animate = () => {
-        drop.y.setValue(-20);
-        Animated.timing(drop.y, {
-          toValue: height + 20,
-          duration: drop.speed,
-          useNativeDriver: false, // Must be false for SVG properties
-        }).start(() => {
-          // Reset and potentially change to easter egg
-          const isEasterEgg = Math.random() > 0.97;
-          drop.char = isEasterEgg
-            ? EASTER_EGGS[Math.floor(Math.random() * EASTER_EGGS.length)]
-            : REGULAR_CHARS[Math.floor(Math.random() * REGULAR_CHARS.length)];
-          drop.isEasterEgg = isEasterEgg;
-          animate();
-        });
-      };
-      animate();
-    });
+    setColumns(newColumns);
+  }, [width]);
 
-    // Cleanup
+  // Animation loop
+  useEffect(() => {
+    if (columns.length === 0 || height === 0) return;
+
+    const maxPosition = Math.ceil(height / FONT_SIZE) + TRAIL_LENGTH + 5;
+
+    intervalRef.current = setInterval(() => {
+      tickRef.current += 1;
+
+      setColumns((prevColumns) =>
+        prevColumns.map((col) => {
+          if (tickRef.current % col.speed !== 0) {
+            return col;
+          }
+
+          let newHeadPosition = col.headPosition + 1;
+          let newChars = [...col.chars];
+
+          // Add new character at the head occasionally
+          if (Math.random() > 0.7) {
+            const newChar = getRandomChar();
+            newChars = [newChar, ...newChars.slice(0, TRAIL_LENGTH - 1)];
+          }
+
+          // Reset when trail is fully past bottom
+          if (newHeadPosition > maxPosition) {
+            newHeadPosition = Math.floor(Math.random() * -10);
+            newChars = Array.from({ length: TRAIL_LENGTH }, () => getRandomChar());
+          }
+
+          return {
+            ...col,
+            headPosition: newHeadPosition,
+            chars: newChars,
+          };
+        })
+      );
+    }, TICK_INTERVAL);
+
     return () => {
-      dropsRef.current.forEach((drop) => drop.y.stopAnimation());
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
     };
-  }, []);
+  }, [columns.length, height]);
+
+  if (columns.length === 0) return null;
 
   return (
-    <Svg style={[StyleSheet.absoluteFill, { opacity: 0.4 }]}>
-      {dropsRef.current.map((drop, index) => (
-        <AnimatedSvgText
-          key={index}
-          x={drop.x}
-          y={drop.y}
-          fontSize={FONT_SIZE}
-          fill={drop.isEasterEgg ? Colors.rainEasterEgg : Colors.rainNormal}
-          fontFamily="monospace"
-          opacity={0.6}
-        >
-          {drop.char}
-        </AnimatedSvgText>
-      ))}
-    </Svg>
+    <View style={styles.container} pointerEvents="none">
+      {columns.map((col) =>
+        col.chars.map((char, trailIndex) => {
+          const yPosition = (col.headPosition - trailIndex) * FONT_SIZE;
+
+          if (yPosition < -FONT_SIZE || yPosition > height + FONT_SIZE) return null;
+
+          const trailOpacity = Math.max(0.05, 1 - (trailIndex / TRAIL_LENGTH) * 0.95);
+
+          const isHead = trailIndex === 0;
+          const color = isHead ? Colors.rainNormal : Colors.rainNormal;
+
+          return (
+            <Text
+              key={`${col.id}-${trailIndex}`}
+              style={[
+                styles.char,
+                {
+                  left: col.x,
+                  top: yPosition,
+                  color,
+                  opacity: trailOpacity * 0.3,
+                },
+              ]}
+            >
+              {char}
+            </Text>
+          );
+        })
+      )}
+    </View>
   );
 }
 
-// Create animated version of SvgText
-const AnimatedSvgText = Animated.createAnimatedComponent(SvgText);
+const styles = StyleSheet.create({
+  container: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  char: {
+    position: 'absolute',
+    fontSize: FONT_SIZE,
+    fontFamily: 'monospace',
+  },
+});

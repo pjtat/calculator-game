@@ -15,6 +15,7 @@ import { RootStackParamList } from '../navigation/AppNavigator';
 import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '../constants/theme';
 import { listenToGame, startGame } from '../services/firebase';
 import { Game, Player } from '../types/game';
+import DemoControls from '../components/DemoControls';
 
 type LobbyScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Lobby'>;
@@ -167,6 +168,9 @@ export default function LobbyScreen({ navigation, route }: LobbyScreenProps) {
           <Text style={styles.waitingText}>Waiting for host to start...</Text>
         </View>
       )}
+
+      {/* Demo Controls */}
+      <DemoControls gameCode={gameCode} />
     </View>
   );
 }

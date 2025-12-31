@@ -3,6 +3,11 @@ import { getAuth, signInAnonymously, Auth } from 'firebase/auth';
 import { getDatabase, ref, set, get, onValue, off, push, update, Database } from 'firebase/database';
 import { Game, Player, Guess, CurrentQuestion, RoundResult } from '../types/game';
 import { ENV } from '../config/env';
+import { DEMO_GAME_CODE, getDemoGame, getDemoGameQuestionEntry, getDemoGameGuessing, getDemoGameResults } from './demoData';
+
+// Demo mode state
+let demoGameState: Game = getDemoGame('waiting');
+let demoGameListeners: Array<(game: Game) => void> = [];
 
 // Firebase configuration from environment variables
 const firebaseConfig = {
@@ -142,6 +147,12 @@ export const joinGame = async (
 // ==================== Start Game ====================
 
 export const startGame = async (gameCode: string): Promise<void> => {
+  // Demo mode - update demo state
+  if (gameCode === DEMO_GAME_CODE) {
+    updateDemoGame(getDemoGameQuestionEntry());
+    return;
+  }
+
   try {
     await update(ref(database, `games/${gameCode}`), {
       status: 'question_entry',
@@ -342,6 +353,20 @@ export const listenToGame = (
   gameCode: string,
   callback: (game: Game | null) => void
 ): (() => void) => {
+  // Demo mode - return mock data
+  if (gameCode === DEMO_GAME_CODE) {
+    // Add listener
+    demoGameListeners.push(callback);
+
+    // Immediately call callback with current demo game state
+    callback(demoGameState);
+
+    // Return cleanup function that removes listener
+    return () => {
+      demoGameListeners = demoGameListeners.filter(cb => cb !== callback);
+    };
+  }
+
   const gameRef = ref(database, `games/${gameCode}`);
 
   const unsubscribe = onValue(gameRef, (snapshot) => {
@@ -354,6 +379,32 @@ export const listenToGame = (
 
   // Return cleanup function
   return () => off(gameRef);
+};
+
+// Helper to update demo game state and notify listeners
+const updateDemoGame = (newState: Game) => {
+  demoGameState = newState;
+  demoGameListeners.forEach(listener => listener(demoGameState));
+};
+
+// Export function to advance demo mode (for debugging/navigation)
+export const advanceDemoMode = () => {
+  switch (demoGameState.status) {
+    case 'waiting':
+      updateDemoGame(getDemoGameQuestionEntry());
+      break;
+    case 'question_entry':
+      updateDemoGame(getDemoGameGuessing());
+      break;
+    case 'guessing':
+      updateDemoGame(getDemoGameResults());
+      break;
+    case 'results':
+      updateDemoGame(getDemoGameQuestionEntry());
+      break;
+    default:
+      updateDemoGame(getDemoGame('waiting'));
+  }
 };
 
 // ==================== Exports ====================

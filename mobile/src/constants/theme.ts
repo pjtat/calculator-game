@@ -26,7 +26,7 @@ export const Colors = {
   input: '#3D4159',
 
   // Numeric rain colors
-  rainNormal: '#3D4159',
+  rainNormal: '#FF8C42', // Orange (matching buttons)
   rainEasterEgg: '#FF8C42',
 };
 
