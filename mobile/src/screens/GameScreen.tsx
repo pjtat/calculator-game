@@ -511,17 +511,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: Spacing.lg,
+    padding: Spacing.md,
+    flexGrow: 1,
   },
   phaseContainer: {
     flex: 1,
   },
   guessingContainer: {
-    flex: 1,
-    justifyContent: 'flex-start',
+    paddingBottom: Spacing.xl,
   },
   calculatorWrapper: {
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   phaseTitle: {
     fontSize: 28,
@@ -567,29 +567,29 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
   },
   questionText: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: FontWeights.bold,
     color: Colors.text,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.xs,
     textAlign: 'center',
   },
   unitsText: {
-    fontSize: FontSizes.lg,
+    fontSize: FontSizes.md,
     color: Colors.textSecondary,
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.md,
     textAlign: 'center',
     fontStyle: 'italic',
   },
   timerContainer: {
     alignItems: 'center',
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.md,
   },
   submitButton: {
     backgroundColor: Colors.primary,
     borderRadius: BorderRadius.full,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
     alignItems: 'center',
-    marginTop: Spacing.lg,
+    marginTop: Spacing.sm,
   },
   submitButtonText: {
     fontSize: FontSizes.lg,
