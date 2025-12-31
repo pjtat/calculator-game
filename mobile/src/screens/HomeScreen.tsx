@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert, Platform } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import NumericRain from '../components/NumericRain';
@@ -62,7 +62,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         {/* Title */}
         <View style={styles.titleContainer}>
           <Text style={styles.title}>Calculator Game</Text>
-          <Text style={styles.subtitle}>Multiplayer estimation trivia</Text>
+          <Text style={styles.subtitle}>Don't be furthest away</Text>
         </View>
 
         {/* Buttons */}
@@ -91,7 +91,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         activeOpacity={0.7}
         style={styles.versionContainer}
       >
-        <Text style={styles.version}>v1.0.0</Text>
+        <Text style={styles.version}>v1.0.1</Text>
       </TouchableOpacity>
     </View>
   );
@@ -113,6 +113,12 @@ const styles = StyleSheet.create({
   titleContainer: {
     alignItems: 'center',
     marginBottom: Spacing.xxl,
+    backgroundColor: 'rgba(10, 14, 26, 0.85)',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.xl,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 140, 66, 0.2)',
   },
   title: {
     fontSize: 48,
@@ -120,11 +126,20 @@ const styles = StyleSheet.create({
     color: Colors.text,
     textAlign: 'center',
     marginBottom: Spacing.md,
+    fontFamily: Platform.select({
+      ios: 'Menlo',
+      android: 'monospace',
+    }),
+    letterSpacing: 2,
   },
   subtitle: {
     fontSize: FontSizes.lg,
     color: Colors.textSecondary,
     textAlign: 'center',
+    fontFamily: Platform.select({
+      ios: 'Menlo',
+      android: 'monospace',
+    }),
   },
   buttonContainer: {
     width: '100%',
