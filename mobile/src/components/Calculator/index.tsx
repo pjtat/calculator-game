@@ -8,37 +8,62 @@ interface CalculatorProps {
 }
 
 export default function Calculator({ onCalculationChange, disabled = false }: CalculatorProps) {
-  const [display, setDisplay] = useState('0');
+  const [displayValue, setDisplayValue] = useState('0');
   const [previousValue, setPreviousValue] = useState<number | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
-  const [history, setHistory] = useState('');
   const [shouldResetDisplay, setShouldResetDisplay] = useState(false);
+
+  const formatNumber = (num: string): string => {
+    // Remove existing commas
+    const cleanNum = num.replace(/,/g, '');
+
+    // Handle decimals
+    if (cleanNum.includes('.')) {
+      const [intPart, decPart] = cleanNum.split('.');
+      const formattedInt = parseFloat(intPart).toLocaleString('en-US');
+      return `${formattedInt}.${decPart}`;
+    }
+
+    // Format integer
+    const numVal = parseFloat(cleanNum);
+    if (isNaN(numVal)) return '0';
+    return numVal.toLocaleString('en-US');
+  };
+
+  const getDisplayText = (): string => {
+    if (previousValue !== null && operation !== null) {
+      const prevFormatted = formatNumber(previousValue.toString());
+      const currFormatted = formatNumber(displayValue);
+      return `${prevFormatted} ${operation} ${currFormatted}`;
+    }
+    return formatNumber(displayValue);
+  };
 
   const handleNumberPress = (num: string) => {
     if (disabled) return;
 
     if (shouldResetDisplay) {
-      setDisplay(num);
+      setDisplayValue(num);
       setShouldResetDisplay(false);
     } else {
-      setDisplay(display === '0' ? num : display + num);
+      const cleanValue = displayValue.replace(/,/g, '');
+      setDisplayValue(cleanValue === '0' ? num : cleanValue + num);
     }
   };
 
   const handleOperationPress = (op: string) => {
     if (disabled) return;
 
-    const currentValue = parseFloat(display);
+    const currentValue = parseFloat(displayValue.replace(/,/g, ''));
 
     if (previousValue !== null && operation !== null && !shouldResetDisplay) {
       // Perform the pending operation
       const result = calculate(previousValue, currentValue, operation);
-      setDisplay(result.toString());
       setPreviousValue(result);
-      setHistory(`${history} ${currentValue} ${operation} `);
+      setDisplayValue('0');
     } else {
       setPreviousValue(currentValue);
-      setHistory(display + ' ' + op + ' ');
+      setDisplayValue('0');
     }
 
     setOperation(op);
@@ -49,28 +74,26 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
     if (disabled) return;
 
     if (previousValue !== null && operation !== null) {
-      const currentValue = parseFloat(display);
+      const currentValue = parseFloat(displayValue.replace(/,/g, ''));
       const result = calculate(previousValue, currentValue, operation);
 
-      const fullHistory = `${history}${currentValue} = ${result}`;
-      setDisplay(result.toString());
-      setHistory(fullHistory);
+      setDisplayValue(result.toString());
       setPreviousValue(null);
       setOperation(null);
       setShouldResetDisplay(true);
 
       // Notify parent with final result
-      onCalculationChange(result, fullHistory);
+      const history = `${formatNumber(previousValue.toString())} ${operation} ${formatNumber(currentValue.toString())} = ${formatNumber(result.toString())}`;
+      onCalculationChange(result, history);
     }
   };
 
   const handleClear = () => {
     if (disabled) return;
 
-    setDisplay('0');
+    setDisplayValue('0');
     setPreviousValue(null);
     setOperation(null);
-    setHistory('');
     setShouldResetDisplay(false);
     onCalculationChange(null, '');
   };
@@ -78,21 +101,23 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
   const handleBackspace = () => {
     if (disabled) return;
 
-    if (display.length > 1) {
-      setDisplay(display.slice(0, -1));
+    const cleanValue = displayValue.replace(/,/g, '');
+    if (cleanValue.length > 1) {
+      setDisplayValue(cleanValue.slice(0, -1));
     } else {
-      setDisplay('0');
+      setDisplayValue('0');
     }
   };
 
   const handleDecimal = () => {
     if (disabled) return;
 
+    const cleanValue = displayValue.replace(/,/g, '');
     if (shouldResetDisplay) {
-      setDisplay('0.');
+      setDisplayValue('0.');
       setShouldResetDisplay(false);
-    } else if (!display.includes('.')) {
-      setDisplay(display + '.');
+    } else if (!cleanValue.includes('.')) {
+      setDisplayValue(cleanValue + '.');
     }
   };
 
@@ -124,19 +149,10 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
 
   return (
     <View style={styles.container}>
-      {/* History Display */}
-      {history.length > 0 && (
-        <View style={styles.historyContainer}>
-          <Text style={styles.historyText} numberOfLines={1}>
-            {history}
-          </Text>
-        </View>
-      )}
-
       {/* Main Display */}
       <View style={styles.displayContainer}>
         <Text style={styles.displayText} numberOfLines={1} adjustsFontSizeToFit={true}>
-          {display}
+          {getDisplayText()}
         </Text>
       </View>
 
@@ -191,15 +207,6 @@ const styles = StyleSheet.create({
     padding: Spacing.xs,
     borderWidth: 1,
     borderColor: Colors.border,
-  },
-  historyContainer: {
-    minHeight: 16,
-    marginBottom: Spacing.xs,
-  },
-  historyText: {
-    fontSize: 10,
-    color: Colors.textSecondary,
-    textAlign: 'right',
   },
   displayContainer: {
     backgroundColor: Colors.background,

@@ -333,7 +333,7 @@ function GuessingView({
           </View>
 
           <TouchableOpacity style={styles.submitButton} onPress={onSubmit}>
-            <Text style={styles.submitButtonText}>LOCK IT IN</Text>
+            <Text style={styles.submitButtonText}>🔒</Text>
           </TouchableOpacity>
         </>
       ) : (
@@ -522,7 +522,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: FontWeights.bold,
     color: Colors.text,
-    marginBottom: Spacing.xs,
+    marginBottom: Spacing.sm,
     textAlign: 'center',
   },
   unitsText: {
