@@ -91,7 +91,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         activeOpacity={0.7}
         style={styles.versionContainer}
       >
-        <Text style={styles.version}>v1.0.2</Text>
+        <Text style={styles.version}>v1.0.3</Text>
       </TouchableOpacity>
     </View>
   );
@@ -125,16 +125,17 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 48,
-    fontWeight: FontWeights.bold,
     color: Colors.text,
     textAlign: 'center',
     marginBottom: Spacing.md,
     letterSpacing: 2,
+    fontFamily: 'Orbitron_900Black',
   },
   subtitle: {
     fontSize: FontSizes.lg,
     color: Colors.textSecondary,
     textAlign: 'center',
+    fontFamily: 'Orbitron_700Bold',
   },
   buttonContainer: {
     width: '100%',
