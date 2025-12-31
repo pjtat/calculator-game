@@ -103,7 +103,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         style={styles.versionContainer}
       >
         <Text style={styles.version}>
-          v1.0.6 {tapCount > 0 && `(${tapCount}/3)`}
+          v1.1.0 {tapCount > 0 && `(${tapCount}/3)`}
         </Text>
       </TouchableOpacity>
     </View>

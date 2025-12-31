@@ -170,12 +170,14 @@ export const submitQuestion = async (
   gameCode: string,
   playerId: string,
   questionText: string,
-  answer: number
+  answer: number,
+  units?: string
 ): Promise<void> => {
   try {
     const question: CurrentQuestion = {
       text: questionText,
       answer,
+      units,
       askedBy: playerId,
       submittedAt: Date.now(),
     };

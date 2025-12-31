@@ -23,6 +23,7 @@ export interface Player {
 export interface CurrentQuestion {
   text: string;
   answer: number;
+  units?: string;
   askedBy: string;
   submittedAt: number;
 }

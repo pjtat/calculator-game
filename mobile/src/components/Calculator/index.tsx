@@ -131,12 +131,11 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
 
       {/* Calculator Buttons */}
       <View style={styles.buttonsContainer}>
-        {/* Row 1: C, ←, /, * */}
+        {/* Row 1: Clear, ÷, × */}
         <View style={styles.row}>
-          <Button value="C" onPress={handleClear} style={styles.operationButton} textStyle={styles.operationButtonText} />
-          <Button value="←" onPress={handleBackspace} style={styles.operationButton} textStyle={styles.operationButtonText} />
-          <Button value="/" onPress={() => handleOperationPress('/')} style={styles.operationButton} textStyle={styles.operationButtonText} />
-          <Button value="*" onPress={() => handleOperationPress('*')} style={styles.operationButton} textStyle={styles.operationButtonText} />
+          <Button value="Clear" onPress={handleClear} style={styles.clearButton} textStyle={styles.clearButtonText} />
+          <Button value="÷" onPress={() => handleOperationPress('/')} style={styles.operationButton} textStyle={styles.operationButtonText} />
+          <Button value="×" onPress={() => handleOperationPress('*')} style={styles.operationButton} textStyle={styles.operationButtonText} />
         </View>
 
         {/* Row 2: 7, 8, 9, - */}
@@ -160,15 +159,14 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
           <Button value="1" onPress={() => handleNumberPress('1')} />
           <Button value="2" onPress={() => handleNumberPress('2')} />
           <Button value="3" onPress={() => handleNumberPress('3')} />
-          <Button value="=" onPress={handleEquals} style={styles.equalsButton} textStyle={styles.equalsButtonText} />
+          <Button value="=" onPress={handleEquals} style={styles.operationButton} textStyle={styles.operationButtonText} />
         </View>
 
-        {/* Row 5: 0 (wide) */}
+        {/* Row 5: 0 (wide), = */}
         <View style={styles.row}>
           <Button value="0" onPress={() => handleNumberPress('0')} style={styles.zeroButton} />
           <View style={styles.button} />
-          <View style={styles.button} />
-          <View style={styles.button} />
+          <Button value="=" onPress={handleEquals} style={styles.equalsButton} textStyle={styles.equalsButtonText} />
         </View>
       </View>
     </View>
@@ -230,6 +228,13 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.xl,
     fontWeight: FontWeights.semibold,
     color: Colors.text,
+  },
+  clearButton: {
+    backgroundColor: Colors.backgroundSecondary,
+  },
+  clearButtonText: {
+    color: Colors.text,
+    fontSize: FontSizes.md,
   },
   operationButton: {
     backgroundColor: Colors.primary + '20',

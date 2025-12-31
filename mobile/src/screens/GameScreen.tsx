@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  SafeAreaView,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
@@ -39,6 +40,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
   const [questionText, setQuestionText] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   const [validatedAnswer, setValidatedAnswer] = useState<number | null>(null);
+  const [validatedUnits, setValidatedUnits] = useState<string | undefined>(undefined);
 
   // Guessing state
   const [guessValue, setGuessValue] = useState<number | null>(null);
@@ -100,14 +102,16 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
 
       if (result.isValid && result.answer !== undefined) {
         setValidatedAnswer(result.answer);
+        setValidatedUnits(result.units);
+        const unitsText = result.units ? ` ${result.units}` : '';
         Alert.alert(
           'Question Validated',
-          `The answer is: ${result.answer.toLocaleString()}\n\nDoes this look correct?`,
+          `The answer is: ${result.answer.toLocaleString()}${unitsText}\n\nDoes this look correct?`,
           [
             { text: 'No, Edit Question', style: 'cancel' },
             {
               text: 'Yes, Use This',
-              onPress: () => handleConfirmQuestion(result.answer!),
+              onPress: () => handleConfirmQuestion(result.answer!, result.units),
             },
           ]
         );
@@ -125,11 +129,12 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     }
   };
 
-  const handleConfirmQuestion = async (answer: number) => {
+  const handleConfirmQuestion = async (answer: number, units?: string) => {
     try {
-      await submitQuestion(gameCode, playerId, questionText.trim(), answer);
+      await submitQuestion(gameCode, playerId, questionText.trim(), answer, units);
       setQuestionText('');
       setValidatedAnswer(null);
+      setValidatedUnits(undefined);
     } catch (error) {
       console.error('Error submitting question:', error);
       Alert.alert('Error', 'Failed to submit question. Please try again.');
@@ -205,7 +210,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
   const isAsker = game.currentQuestion?.askedBy === playerId;
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Scoreboard Header */}
       <View style={styles.scoreboard}>
         <Text style={styles.scoreboardTitle}>
@@ -242,6 +247,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
         {game.status === 'guessing' && !isAsker && (
           <GuessingView
             question={game.currentQuestion?.text || ''}
+            units={game.currentQuestion?.units}
             duration={game.config.timerDuration}
             hasSubmitted={hasSubmittedGuess}
             onCalculationChange={handleCalculationChange}
@@ -272,7 +278,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
 
       {/* Demo Controls */}
       <DemoControls gameCode={gameCode} />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -322,6 +328,7 @@ function WaitingForQuestionView({ askerName }: any) {
 
 function GuessingView({
   question,
+  units,
   duration,
   hasSubmitted,
   onCalculationChange,
@@ -329,8 +336,9 @@ function GuessingView({
   onTimerExpire,
 }: any) {
   return (
-    <View style={styles.phaseContainer}>
+    <View style={styles.guessingContainer}>
       <Text style={styles.questionText}>{question}</Text>
+      {units && <Text style={styles.unitsText}>{units}</Text>}
 
       <View style={styles.timerContainer}>
         <Timer duration={duration} onExpire={onTimerExpire} />
@@ -338,7 +346,9 @@ function GuessingView({
 
       {!hasSubmitted ? (
         <>
-          <Calculator onCalculationChange={onCalculationChange} />
+          <View style={styles.calculatorWrapper}>
+            <Calculator onCalculationChange={onCalculationChange} />
+          </View>
 
           <TouchableOpacity style={styles.submitButton} onPress={onSubmit}>
             <Text style={styles.submitButtonText}>Submit Guess</Text>
@@ -347,7 +357,8 @@ function GuessingView({
       ) : (
         <View style={styles.submittedContainer}>
           <Text style={styles.submittedText}>✓ Guess submitted</Text>
-          <Text style={styles.submittedSubtext}>Waiting for others...</Text>
+          <ActivityIndicator size="large" color={Colors.primary} style={styles.submittedSpinner} />
+          <Text style={styles.submittedSubtext}>Waiting for other players...</Text>
         </View>
       )}
     </View>
@@ -505,6 +516,13 @@ const styles = StyleSheet.create({
   phaseContainer: {
     flex: 1,
   },
+  guessingContainer: {
+    flex: 1,
+    justifyContent: 'flex-start',
+  },
+  calculatorWrapper: {
+    marginBottom: Spacing.md,
+  },
   phaseTitle: {
     fontSize: 28,
     fontWeight: FontWeights.bold,
@@ -552,8 +570,15 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: FontWeights.bold,
     color: Colors.text,
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
+  },
+  unitsText: {
+    fontSize: FontSizes.lg,
+    color: Colors.textSecondary,
     marginBottom: Spacing.xl,
     textAlign: 'center',
+    fontStyle: 'italic',
   },
   timerContainer: {
     alignItems: 'center',
@@ -574,16 +599,22 @@ const styles = StyleSheet.create({
   submittedContainer: {
     alignItems: 'center',
     paddingVertical: Spacing.xxl,
+    justifyContent: 'center',
+    flex: 1,
   },
   submittedText: {
     fontSize: 24,
     fontWeight: FontWeights.bold,
     color: Colors.primary,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.lg,
+  },
+  submittedSpinner: {
+    marginVertical: Spacing.xl,
   },
   submittedSubtext: {
     fontSize: FontSizes.md,
     color: Colors.textSecondary,
+    marginTop: Spacing.sm,
   },
   answerContainer: {
     backgroundColor: Colors.backgroundSecondary,

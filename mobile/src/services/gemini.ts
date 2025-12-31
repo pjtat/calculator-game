@@ -7,6 +7,7 @@ const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/
 export interface QuestionValidationResult {
   isValid: boolean;
   answer?: number;
+  units?: string;
   errorMessage?: string;
   reasoning?: string;
 }
@@ -20,7 +21,8 @@ Question: "${question}"
 Your task:
 1. Determine if this question has a single, factual, quantifiable numeric answer.
 2. If yes, provide the most accurate answer as a number.
-3. If no (subjective, time-sensitive, unknowable, or impossible to quantify), explain why.
+3. Identify the units of measurement (e.g., "people", "miles", "pounds", "years", "dollars", etc.)
+4. If no (subjective, time-sensitive, unknowable, or impossible to quantify), explain why.
 
 Important guidelines:
 - The answer must be a concrete number (not a range)
@@ -28,11 +30,13 @@ Important guidelines:
 - Reject questions that are too subjective or opinion-based
 - Reject questions that change frequently (e.g., "How many followers does @user have right now?")
 - Accept historical facts with numeric answers (e.g., "How many people attended Woodstock?")
+- For count questions without explicit units, use "items" or a contextual noun (e.g., "people", "restaurants", "countries")
 
 Respond in JSON format:
 {
   "isValid": true or false,
   "answer": <number or null>,
+  "units": "<unit of measurement>",
   "reasoning": "<brief explanation>"
 }
 
@@ -90,6 +94,7 @@ ONLY respond with the JSON object, nothing else.`;
       return {
         isValid: true,
         answer: parsedResponse.answer,
+        units: parsedResponse.units || 'units',
         reasoning: parsedResponse.reasoning,
       };
     } else {
