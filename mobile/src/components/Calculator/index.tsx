@@ -223,16 +223,16 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   buttonsContainer: {
-    gap: 6,
+    gap: 10,
   },
   row: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 10,
   },
   button: {
     flex: 1,
     aspectRatio: 1,
-    maxHeight: 52,
+    maxHeight: 44,
     backgroundColor: Colors.background,
     borderRadius: BorderRadius.sm,
     justifyContent: 'center',
