@@ -1,7 +1,8 @@
 // Gemini API service for question validation
-import { ENV } from '../config/env';
+import Constants from 'expo-constants';
 
-const GEMINI_API_KEY = ENV.GEMINI_API_KEY;
+const extra = Constants.expoConfig?.extra;
+const GEMINI_API_KEY = extra?.geminiApiKey;
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
 export interface QuestionValidationResult {
