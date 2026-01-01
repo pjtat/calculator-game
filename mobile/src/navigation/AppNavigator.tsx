@@ -9,11 +9,13 @@ import CreateGameScreen from '../screens/CreateGameScreen';
 import LobbyScreen from '../screens/LobbyScreen';
 import GameScreen from '../screens/GameScreen';
 import GameEndScreen from '../screens/GameEndScreen';
+import HowToPlayScreen from '../screens/HowToPlayScreen';
 
 export type RootStackParamList = {
   Home: undefined;
   JoinGame: undefined;
   CreateGame: undefined;
+  HowToPlay: undefined;
   Lobby: { gameCode: string; playerId: string };
   QuestionEntry: { gameCode: string; playerId: string };
   Game: { gameCode: string; playerId: string };
@@ -35,6 +37,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="CreateGame" component={CreateGameScreen} />
         <Stack.Screen name="JoinGame" component={JoinGameScreen} />
+        <Stack.Screen name="HowToPlay" component={HowToPlayScreen} />
         <Stack.Screen name="Lobby" component={LobbyScreen} />
         <Stack.Screen name="Game" component={GameScreen} />
         <Stack.Screen name="GameEnd" component={GameEndScreen} />

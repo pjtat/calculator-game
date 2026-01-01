@@ -93,6 +93,14 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           >
             <Text style={styles.buttonText}>Join Game</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => navigation.navigate('HowToPlay')}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.secondaryButtonText}>How to Play</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -174,6 +182,21 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.lg,
     fontWeight: FontWeights.semibold,
     color: Colors.primaryForeground,
+  },
+  secondaryButton: {
+    width: '100%',
+    height: 56,
+    backgroundColor: 'transparent',
+    borderRadius: BorderRadius.full,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.semibold,
+    color: Colors.primary,
   },
   versionContainer: {
     position: 'absolute',

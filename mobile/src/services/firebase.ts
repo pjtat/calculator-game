@@ -1,6 +1,7 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, Auth } from 'firebase/auth';
+import { initializeApp, getApps } from 'firebase/app';
+import { initializeAuth, getReactNativePersistence, signInAnonymously, Auth, getAuth } from 'firebase/auth';
 import { getDatabase, ref, set, get, onValue, off, push, update, Database } from 'firebase/database';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Game, Player, Guess, CurrentQuestion, RoundResult } from '../types/game';
 import {
@@ -11,6 +12,7 @@ import {
   getDemoGameGuessing,
   getDemoGameAskerWaiting,
   getDemoGameResults,
+  getDemoGameStandings,
   getDemoGameEnd,
 } from './demoData';
 
@@ -18,18 +20,29 @@ import {
 let demoGameState: Game = getDemoGame('waiting');
 let demoGameListeners: Array<(game: Game) => void> = [];
 
-// Firebase configuration from app.config.ts extra
+// Firebase configuration from app.config.ts extra (with local dev fallbacks)
 const extra = Constants.expoConfig?.extra;
 const firebaseConfig = {
-  apiKey: extra?.firebaseApiKey,
-  authDomain: extra?.firebaseAuthDomain,
-  databaseURL: extra?.firebaseDatabaseUrl,
-  projectId: extra?.firebaseProjectId,
+  apiKey: extra?.firebaseApiKey || 'AIzaSyDc1eqon-JZ-FjCoE0pjKQjD0L7XP8DL9U',
+  authDomain: extra?.firebaseAuthDomain || 'calculator-game-1690a.firebaseapp.com',
+  databaseURL: extra?.firebaseDatabaseUrl || 'https://calculator-game-1690a-default-rtdb.firebaseio.com',
+  projectId: extra?.firebaseProjectId || 'calculator-game-1690a',
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth: Auth = getAuth(app);
+// Initialize Firebase (handle hot reload)
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+
+// Initialize Auth with AsyncStorage persistence
+let auth: Auth;
+try {
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage)
+  });
+} catch (error) {
+  // Auth already initialized (hot reload), get existing instance
+  auth = getAuth(app);
+}
+
 const database: Database = getDatabase(app);
 
 // ==================== Authentication ====================
@@ -332,6 +345,19 @@ export const checkWinCondition = async (gameCode: string): Promise<boolean> => {
   }
 };
 
+// ==================== Move to Standings ====================
+
+export const moveToStandings = async (gameCode: string): Promise<void> => {
+  try {
+    await update(ref(database, `games/${gameCode}`), {
+      status: 'standings',
+    });
+  } catch (error) {
+    console.error('Error moving to standings:', error);
+    throw error;
+  }
+};
+
 // ==================== Advance to Next Round ====================
 
 export const advanceToNextRound = async (gameCode: string): Promise<void> => {
@@ -412,6 +438,9 @@ export const advanceDemoMode = () => {
       updateDemoGame(getDemoGameResults());
       break;
     case 'results':
+      updateDemoGame(getDemoGameStandings());
+      break;
+    case 'standings':
       updateDemoGame(getDemoGameQuestionEntry());
       break;
     default:
@@ -429,17 +458,19 @@ export type DemoScreen =
   | 'guessing'
   | 'asker_waiting'
   | 'results'
+  | 'standings'
   | 'game_end';
 
 export const DEMO_SCREENS: { key: DemoScreen; label: string; isNavigation?: boolean }[] = [
   { key: 'create_game', label: 'Create Game', isNavigation: true },
   { key: 'join_game', label: 'Join Game', isNavigation: true },
-  { key: 'lobby', label: 'Lobby (Waiting)' },
+  { key: 'lobby', label: 'Lobby (Waiting)', isNavigation: true },
   { key: 'question_entry', label: 'Ask a Question' },
   { key: 'waiting_for_question', label: 'Waiting for Question' },
   { key: 'guessing', label: 'Guessing Screen' },
   { key: 'asker_waiting', label: 'Asker Waiting' },
   { key: 'results', label: 'Round Results' },
+  { key: 'standings', label: 'Standings' },
   { key: 'game_end', label: 'Game End' },
 ];
 
@@ -463,6 +494,9 @@ export const setDemoScreen = (screen: DemoScreen) => {
       break;
     case 'results':
       updateDemoGame(getDemoGameResults());
+      break;
+    case 'standings':
+      updateDemoGame(getDemoGameStandings());
       break;
     case 'game_end':
       updateDemoGame(getDemoGameEnd());

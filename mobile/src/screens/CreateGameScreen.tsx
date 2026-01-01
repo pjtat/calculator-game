@@ -22,8 +22,10 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
   const [nickname, setNickname] = useState('');
   const [roundsOption, setRoundsOption] = useState<'10' | '20' | 'custom'>('10');
   const [customRounds, setCustomRounds] = useState('');
-  const [scoreOption, setScoreOption] = useState<'5' | '10' | 'custom'>('10');
+  const [scoreOption, setScoreOption] = useState<'5' | '10' | 'custom'>('5');
   const [customScore, setCustomScore] = useState('');
+  const [closestScore, setClosestScore] = useState('1');
+  const [furthestScore, setFurthestScore] = useState('-1');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleCreateGame = async () => {
@@ -49,6 +51,20 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
     const scoreValue = scoreOption === 'custom' ? parseInt(customScore) : parseInt(scoreOption);
     if (isNaN(scoreValue) || scoreValue < 1 || scoreValue > 99) {
       Alert.alert('Invalid Score', 'Please enter a valid score target (1-99).');
+      return;
+    }
+
+    // Validate closest score
+    const closestScoreValue = parseInt(closestScore);
+    if (isNaN(closestScoreValue) || closestScoreValue < -99 || closestScoreValue > 99) {
+      Alert.alert('Invalid Closest Score', 'Please enter a valid closest score (-99 to 99).');
+      return;
+    }
+
+    // Validate furthest score
+    const furthestScoreValue = parseInt(furthestScore);
+    if (isNaN(furthestScoreValue) || furthestScoreValue < -99 || furthestScoreValue > 99) {
+      Alert.alert('Invalid Furthest Score', 'Please enter a valid furthest score (-99 to 99).');
       return;
     }
 
@@ -82,7 +98,7 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
         <Text style={styles.label}>Your Nickname</Text>
         <TextInput
           style={styles.input}
-          placeholder="Enter nickname"
+          placeholder="Big Numbas Guy"
           placeholderTextColor={Colors.textSecondary}
           value={nickname}
           onChangeText={setNickname}
@@ -206,6 +222,39 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
         )}
       </View>
 
+      {/* Scoring Configuration */}
+      <View style={styles.section}>
+        <View style={styles.scoringRow}>
+          <View style={styles.scoringItem}>
+            <Text style={styles.label}>Closest Score</Text>
+            <TextInput
+              style={[styles.input, styles.smallInput]}
+              placeholder="1"
+              placeholderTextColor={Colors.textSecondary}
+              value={closestScore}
+              onChangeText={setClosestScore}
+              keyboardType="numeric"
+              maxLength={3}
+              textAlign="center"
+            />
+          </View>
+
+          <View style={styles.scoringItem}>
+            <Text style={styles.label}>Furthest Score</Text>
+            <TextInput
+              style={[styles.input, styles.smallInput]}
+              placeholder="-1"
+              placeholderTextColor={Colors.textSecondary}
+              value={furthestScore}
+              onChangeText={setFurthestScore}
+              keyboardType="numeric"
+              maxLength={3}
+              textAlign="center"
+            />
+          </View>
+        </View>
+      </View>
+
       {/* Create Button */}
       <TouchableOpacity
         style={[styles.createButton, isLoading && styles.createButtonDisabled]}
@@ -274,6 +323,17 @@ const styles = StyleSheet.create({
   optionsContainer: {
     flexDirection: 'row',
     gap: Spacing.sm,
+  },
+  scoringRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  scoringItem: {
+    flex: 1,
+  },
+  smallInput: {
+    width: '100%',
+    textAlign: 'center',
   },
   optionButton: {
     flex: 1,

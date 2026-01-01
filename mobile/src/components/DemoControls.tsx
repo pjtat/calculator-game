@@ -36,6 +36,12 @@ export default function DemoControls({ gameCode, navigation }: DemoControlsProps
         navigation.navigate('CreateGame');
       } else if (screen === 'join_game') {
         navigation.navigate('JoinGame');
+      } else if (screen === 'lobby') {
+        setDemoScreen('lobby');
+        navigation.navigate('Lobby', {
+          gameCode: DEMO_GAME_CODE,
+          playerId: 'demo-player-1',
+        });
       }
     } else {
       // Update demo game state

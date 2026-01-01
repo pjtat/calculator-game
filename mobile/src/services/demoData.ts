@@ -137,16 +137,67 @@ export const getDemoGameResults = (): Game => {
             playerId: DEMO_PLAYER_ID,
             guess: 35000000,
             percentageError: 6.4,
-            pointsAwarded: 3,
+            pointsAwarded: 1,
           },
           {
             playerId: 'demo-player-3',
             guess: 40000000,
             percentageError: 6.9,
-            pointsAwarded: 2,
+            pointsAwarded: 0,
           },
         ],
         winner: DEMO_PLAYER_ID,
+        loser: 'demo-player-3',
+      },
+    },
+    players: {
+      [DEMO_PLAYER_ID]: {
+        nickname: 'You (Demo)',
+        score: 1,
+        isHost: true,
+        joinedAt: Date.now(),
+      },
+      'demo-player-2': {
+        nickname: 'Alice',
+        score: 0,
+        isHost: false,
+        joinedAt: Date.now(),
+      },
+      'demo-player-3': {
+        nickname: 'Bob',
+        score: 0,
+        isHost: false,
+        joinedAt: Date.now(),
+      },
+    },
+  };
+};
+
+export const getDemoGameStandings = (): Game => {
+  const game = getDemoGame('standings');
+  return {
+    ...game,
+    currentRound: 1,
+    nextAsker: DEMO_PLAYER_ID,
+    roundResults: {
+      round_1: {
+        correctAnswer: 37400000,
+        rankings: [
+          {
+            playerId: DEMO_PLAYER_ID,
+            guess: 35000000,
+            percentageError: 6.4,
+            pointsAwarded: 1,
+          },
+          {
+            playerId: 'demo-player-3',
+            guess: 40000000,
+            percentageError: 6.9,
+            pointsAwarded: 0,
+          },
+        ],
+        winner: DEMO_PLAYER_ID,
+        loser: 'demo-player-3',
       },
     },
     players: {
@@ -154,16 +205,19 @@ export const getDemoGameResults = (): Game => {
         nickname: 'You (Demo)',
         score: 3,
         isHost: true,
+        joinedAt: Date.now(),
       },
       'demo-player-2': {
         nickname: 'Alice',
-        score: 0,
+        score: 1,
         isHost: false,
+        joinedAt: Date.now(),
       },
       'demo-player-3': {
         nickname: 'Bob',
-        score: 2,
+        score: -1,
         isHost: false,
+        joinedAt: Date.now(),
       },
     },
   };

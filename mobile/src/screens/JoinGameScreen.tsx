@@ -72,7 +72,6 @@ export default function JoinGameScreen({ navigation }: JoinGameScreenProps) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Join Game</Text>
-        <Text style={styles.subtitle}>Enter the game code to join</Text>
       </View>
 
       {/* Game Code Input */}
@@ -96,7 +95,7 @@ export default function JoinGameScreen({ navigation }: JoinGameScreenProps) {
         <Text style={styles.label}>Your Nickname</Text>
         <TextInput
           style={styles.input}
-          placeholder="Enter nickname"
+          placeholder="Big Numbas Guy"
           placeholderTextColor={Colors.textSecondary}
           value={nickname}
           onChangeText={setNickname}
@@ -104,7 +103,6 @@ export default function JoinGameScreen({ navigation }: JoinGameScreenProps) {
           autoCapitalize="words"
           autoCorrect={false}
         />
-        <Text style={styles.hint}>2-15 characters</Text>
       </View>
 
       {/* Join Button */}
@@ -150,10 +148,6 @@ const styles = StyleSheet.create({
     fontWeight: FontWeights.bold,
     color: Colors.text,
     marginBottom: Spacing.sm,
-  },
-  subtitle: {
-    fontSize: FontSizes.md,
-    color: Colors.textSecondary,
   },
   section: {
     marginBottom: Spacing.xl,

@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   SafeAreaView,
+  Linking,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
@@ -19,6 +20,7 @@ import {
   submitQuestion,
   submitGuess,
   calculateAndSubmitResults,
+  moveToStandings,
   advanceToNextRound,
 } from '../services/firebase';
 import { validateQuestion } from '../services/gemini';
@@ -38,9 +40,14 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
 
   // Question Entry state
   const [questionText, setQuestionText] = useState('');
+  const [preferredUnits, setPreferredUnits] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   const [validatedAnswer, setValidatedAnswer] = useState<number | null>(null);
   const [validatedUnits, setValidatedUnits] = useState<string | undefined>(undefined);
+  const [showAnswerPreview, setShowAnswerPreview] = useState(false);
+  const [isCustomAnswerMode, setIsCustomAnswerMode] = useState(false);
+  const [customAnswer, setCustomAnswer] = useState('');
+  const [customUnits, setCustomUnits] = useState('');
 
   // Guessing state
   const [guessValue, setGuessValue] = useState<number | null>(null);
@@ -78,6 +85,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
   }, [gameCode, playerId, navigation]);
 
   const shouldAutoCalculateResults = (g: Game): boolean => {
+    if (!g.guesses) return false;
     const guesses = g.guesses[`round_${g.currentRound}`];
     if (!guesses) return false;
 
@@ -96,25 +104,16 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     }
 
     setIsValidating(true);
+    setShowAnswerPreview(false);
+    setIsCustomAnswerMode(false);
 
     try {
-      const result = await validateQuestion(questionText.trim());
+      const result = await validateQuestion(questionText.trim(), preferredUnits.trim() || undefined);
 
       if (result.isValid && result.answer !== undefined) {
         setValidatedAnswer(result.answer);
         setValidatedUnits(result.units);
-        const unitsText = result.units ? ` ${result.units}` : '';
-        Alert.alert(
-          'Question Validated',
-          `The answer is: ${result.answer.toLocaleString()}${unitsText}\n\nDoes this look correct?`,
-          [
-            { text: 'No, Edit Question', style: 'cancel' },
-            {
-              text: 'Yes, Use This',
-              onPress: () => handleConfirmQuestion(result.answer!, result.units),
-            },
-          ]
-        );
+        setShowAnswerPreview(true);
       } else {
         Alert.alert(
           'Invalid Question',
@@ -129,12 +128,51 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     }
   };
 
+  const handleAcceptAnswer = () => {
+    if (validatedAnswer !== null) {
+      handleConfirmQuestion(validatedAnswer, validatedUnits);
+    }
+  };
+
+  const handleRejectAnswer = () => {
+    setIsCustomAnswerMode(true);
+    setCustomAnswer('');
+    setCustomUnits(preferredUnits || validatedUnits || '');
+  };
+
+  const handleSubmitCustomAnswer = () => {
+    const parsedAnswer = parseFloat(customAnswer.replace(/,/g, ''));
+    if (isNaN(parsedAnswer)) {
+      Alert.alert('Invalid Answer', 'Please enter a valid number.');
+      return;
+    }
+    handleConfirmQuestion(parsedAnswer, customUnits || undefined);
+  };
+
+  const handleResetQuestion = () => {
+    setShowAnswerPreview(false);
+    setIsCustomAnswerMode(false);
+    setValidatedAnswer(null);
+    setValidatedUnits(undefined);
+    setCustomAnswer('');
+    setCustomUnits('');
+  };
+
+  const openGoogleSearch = () => {
+    const query = encodeURIComponent(questionText.trim());
+    Linking.openURL(`https://www.google.com/search?q=${query}`);
+  };
+
   const handleConfirmQuestion = async (answer: number, units?: string) => {
     try {
       await submitQuestion(gameCode, playerId, questionText.trim(), answer, units);
       setQuestionText('');
+      setPreferredUnits('');
       setValidatedAnswer(null);
       setValidatedUnits(undefined);
+      setShowAnswerPreview(false);
+      setIsCustomAnswerMode(false);
+      setCustomAnswer('');
     } catch (error) {
       console.error('Error submitting question:', error);
       Alert.alert('Error', 'Failed to submit question. Please try again.');
@@ -187,6 +225,15 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
 
   // ========== Results Functions ==========
 
+  const handleViewStandings = async () => {
+    try {
+      await moveToStandings(gameCode);
+    } catch (error) {
+      console.error('Error moving to standings:', error);
+      Alert.alert('Error', 'Failed to view standings. Please try again.');
+    }
+  };
+
   const handleNextRound = async () => {
     try {
       await advanceToNextRound(gameCode);
@@ -218,8 +265,23 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
           <QuestionEntryView
             questionText={questionText}
             setQuestionText={setQuestionText}
+            preferredUnits={preferredUnits}
+            setPreferredUnits={setPreferredUnits}
             isValidating={isValidating}
             onValidate={handleValidateQuestion}
+            showAnswerPreview={showAnswerPreview}
+            validatedAnswer={validatedAnswer}
+            validatedUnits={validatedUnits}
+            isCustomAnswerMode={isCustomAnswerMode}
+            customAnswer={customAnswer}
+            setCustomAnswer={setCustomAnswer}
+            customUnits={customUnits}
+            setCustomUnits={setCustomUnits}
+            onAccept={handleAcceptAnswer}
+            onReject={handleRejectAnswer}
+            onSubmitCustom={handleSubmitCustomAnswer}
+            onReset={handleResetQuestion}
+            onGoogleSearch={openGoogleSearch}
           />
         )}
 
@@ -255,6 +317,14 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
             game={game}
             playerId={playerId}
             isWinner={game.roundResults[`round_${game.currentRound}`]?.winner === playerId}
+            onViewStandings={handleViewStandings}
+          />
+        )}
+
+        {game.status === 'standings' && (
+          <StandingsView
+            game={game}
+            playerId={playerId}
             onNextRound={handleNextRound}
           />
         )}
@@ -268,7 +338,113 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
 
 // ========== Sub-Components ==========
 
-function QuestionEntryView({ questionText, setQuestionText, isValidating, onValidate }: any) {
+function QuestionEntryView({
+  questionText,
+  setQuestionText,
+  preferredUnits,
+  setPreferredUnits,
+  isValidating,
+  onValidate,
+  showAnswerPreview,
+  validatedAnswer,
+  validatedUnits,
+  isCustomAnswerMode,
+  customAnswer,
+  setCustomAnswer,
+  customUnits,
+  setCustomUnits,
+  onAccept,
+  onReject,
+  onSubmitCustom,
+  onReset,
+  onGoogleSearch,
+}: any) {
+  // Show custom answer input mode
+  if (isCustomAnswerMode) {
+    return (
+      <View style={styles.phaseContainer}>
+        <Text style={styles.phaseTitle}>Enter Your Answer</Text>
+        <Text style={styles.phaseSubtitle}>
+          What's the correct answer to your question?
+        </Text>
+
+        <View style={styles.questionPreview}>
+          <Text style={styles.questionPreviewText}>{questionText}</Text>
+        </View>
+
+        <TextInput
+          style={styles.customAnswerInput}
+          placeholder="Enter the correct number"
+          placeholderTextColor={Colors.textSecondary}
+          value={customAnswer}
+          onChangeText={setCustomAnswer}
+          keyboardType="numeric"
+        />
+
+        <TextInput
+          style={styles.unitsInput}
+          placeholder="feet, people, dollars, etc."
+          placeholderTextColor={Colors.textSecondary}
+          value={customUnits}
+          onChangeText={setCustomUnits}
+          maxLength={30}
+        />
+
+        <TouchableOpacity style={styles.searchLink} onPress={onGoogleSearch}>
+          <Text style={styles.searchLinkText}>See Google Results</Text>
+        </TouchableOpacity>
+
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.secondaryButton} onPress={onReset}>
+            <Text style={styles.secondaryButtonText}>Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.primaryButton} onPress={onSubmitCustom}>
+            <Text style={styles.primaryButtonText}>Confirm</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // Show answer preview mode
+  if (showAnswerPreview && validatedAnswer !== null) {
+    return (
+      <View style={styles.phaseContainer}>
+        <Text style={styles.phaseTitle}>Verify Answer</Text>
+
+        <View style={styles.questionPreview}>
+          <Text style={styles.questionPreviewText}>{questionText}</Text>
+        </View>
+
+        <View style={styles.foundAnswerContainer}>
+          <Text style={styles.foundAnswerLabel}>Answer:</Text>
+          <Text style={styles.foundAnswerValue}>{validatedAnswer.toLocaleString()}</Text>
+          {validatedUnits && <Text style={styles.foundAnswerUnits}>{validatedUnits}</Text>}
+        </View>
+
+        <Text style={styles.confirmText}>Does this look correct?</Text>
+
+        <TouchableOpacity style={styles.searchLink} onPress={onGoogleSearch}>
+          <Text style={styles.searchLinkText}>See Google Results</Text>
+        </TouchableOpacity>
+
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.secondaryButton} onPress={onReject}>
+            <Text style={styles.secondaryButtonText}>Enter My Own</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.primaryButton} onPress={onAccept}>
+            <Text style={styles.primaryButtonText}>Confirm</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity style={styles.editQuestionButton} onPress={onReset}>
+          <Text style={styles.editQuestionText}>Edit Question</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // Default: question entry mode
   return (
     <View style={styles.phaseContainer}>
       <Text style={styles.phaseTitle}>Your Turn - Ask a Question</Text>
@@ -278,7 +454,7 @@ function QuestionEntryView({ questionText, setQuestionText, isValidating, onVali
 
       <TextInput
         style={styles.questionInput}
-        placeholder="e.g., How many restaurants are in NYC?"
+        placeholder="How many restaurants are in NYC, etc."
         placeholderTextColor={Colors.textSecondary}
         value={questionText}
         onChangeText={setQuestionText}
@@ -286,15 +462,24 @@ function QuestionEntryView({ questionText, setQuestionText, isValidating, onVali
         maxLength={200}
       />
 
+      <TextInput
+        style={styles.unitsInput}
+        placeholder="feet, people, dollars, etc."
+        placeholderTextColor={Colors.textSecondary}
+        value={preferredUnits}
+        onChangeText={setPreferredUnits}
+        maxLength={30}
+      />
+
       <TouchableOpacity
         style={[styles.validateButton, isValidating && styles.buttonDisabled]}
         onPress={onValidate}
-        disabled={isValidating}
+        disabled={isValidating || questionText.trim().length < 5}
       >
         {isValidating ? (
           <ActivityIndicator color={Colors.primaryForeground} />
         ) : (
-          <Text style={styles.validateButtonText}>Validate Question</Text>
+          <Text style={styles.validateButtonText}>Find Answer</Text>
         )}
       </TouchableOpacity>
     </View>
@@ -320,6 +505,19 @@ function GuessingView({
   onSubmit,
   onTimerExpire,
 }: any) {
+  const snarkyComments = [
+    "That wouldn't be my first guess…",
+    "I'm sure you'll be closer this time..",
+    "Are you sure you read the question right?",
+    "Bold choice...",
+    "Interesting strategy there.",
+    "Let's see how this plays out...",
+  ];
+
+  const [snarkyComment] = React.useState(
+    snarkyComments[Math.floor(Math.random() * snarkyComments.length)]
+  );
+
   return (
     <View style={styles.guessingContainer}>
       <Text style={styles.questionText}>{question}</Text>
@@ -346,7 +544,7 @@ function GuessingView({
       ) : (
         <View style={styles.submittedContainer}>
           <Text style={styles.submittedText}>✓ Guess submitted</Text>
-          <Text style={styles.submittedSubtext}>Waiting for other players...</Text>
+          <Text style={styles.submittedSubtext}>{snarkyComment}</Text>
         </View>
       )}
     </View>
@@ -354,20 +552,25 @@ function GuessingView({
 }
 
 function AskerWaitingView({ question, answer, duration, game, onTimerExpire }: any) {
-  const guesses = game.guesses[`round_${game.currentRound}`] || {};
+  const guesses = game.guesses?.[`round_${game.currentRound}`] || {};
   const totalGuessers = Object.keys(game.players).length - 1;
   const submitted = Object.keys(guesses).length;
+  const units = game.currentQuestion?.units;
 
   return (
     <View style={styles.phaseContainer}>
       <Text style={styles.questionText}>{question}</Text>
-      <View style={styles.answerContainer}>
-        <Text style={styles.answerLabel}>Correct Answer:</Text>
-        <Text style={styles.answerValue}>{answer.toLocaleString()}</Text>
-      </View>
+
+      <View style={styles.divider} />
 
       <View style={styles.timerContainer}>
         <Timer duration={duration} onExpire={onTimerExpire} />
+      </View>
+
+      <View style={styles.answerContainer}>
+        <Text style={styles.answerLabel}>Correct Answer:</Text>
+        <Text style={styles.answerValue}>{answer.toLocaleString()}</Text>
+        {units && <Text style={styles.answerUnits}>{units}</Text>}
       </View>
 
       <View style={styles.progressContainer}>
@@ -379,7 +582,7 @@ function AskerWaitingView({ question, answer, duration, game, onTimerExpire }: a
   );
 }
 
-function ResultsView({ game, playerId, isWinner, onNextRound }: any) {
+function ResultsView({ game, playerId, isWinner, onViewStandings }: any) {
   const roundResult = game.roundResults[`round_${game.currentRound}`];
   if (!roundResult) return null;
 
@@ -426,6 +629,81 @@ function ResultsView({ game, playerId, isWinner, onNextRound }: any) {
                   {ranking.pointsAwarded > 0 ? '+' : ''}
                   {ranking.pointsAwarded}
                 </Text>
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+
+      {canContinue ? (
+        <TouchableOpacity style={styles.nextButton} onPress={onViewStandings}>
+          <Text style={styles.nextButtonText}>View Standings</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.waitingNextContainer}>
+          <Text style={styles.waitingNextText}>
+            Waiting for {game.players[game.nextAsker]?.nickname} to continue...
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function StandingsView({ game, playerId, onNextRound }: any) {
+  const canContinue = game.nextAsker === playerId;
+
+  // Create standings sorted by score
+  const standings = Object.entries(game.players)
+    .map(([id, player]: [string, any]) => ({
+      playerId: id,
+      nickname: player.nickname,
+      score: player.score,
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  // Determine win condition text
+  const winConditionText = game.config.gameMode === 'rounds'
+    ? `First to ${game.config.targetRounds} rounds`
+    : `First to ${game.config.targetScore} points`;
+
+  return (
+    <View style={styles.phaseContainer}>
+      <Text style={styles.standingsTitle}>Overall Standings</Text>
+
+      <View style={styles.standingsHeader}>
+        <Text style={styles.standingsRound}>Round {game.currentRound}</Text>
+        <Text style={styles.standingsWinCondition}>{winConditionText}</Text>
+      </View>
+
+      <ScrollView style={styles.standingsList}>
+        {standings.map((standing, index) => {
+          const isCurrentPlayer = standing.playerId === playerId;
+          const isFirst = index === 0;
+          const isLast = index === standings.length - 1;
+
+          return (
+            <View
+              key={standing.playerId}
+              style={[
+                styles.standingItem,
+                isFirst && styles.standingFirst,
+                isLast && standings.length > 1 && styles.standingLast,
+                isCurrentPlayer && styles.standingCurrent,
+              ]}
+            >
+              <View style={styles.standingRank}>
+                <Text style={styles.standingRankText}>#{index + 1}</Text>
+              </View>
+              <View style={styles.standingInfo}>
+                <View style={styles.standingNameRow}>
+                  <Text style={styles.standingName}>{standing.nickname}</Text>
+                  {isFirst && <Text style={styles.standingEmoji}>👑</Text>}
+                  {isLast && standings.length > 1 && <Text style={styles.standingEmoji}>💩</Text>}
+                </View>
+              </View>
+              <View style={styles.standingScore}>
+                <Text style={styles.standingScoreText}>{standing.score}</Text>
               </View>
             </View>
           );
@@ -507,6 +785,16 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     minHeight: 100,
     textAlignVertical: 'top',
+    marginBottom: Spacing.md,
+  },
+  unitsInput: {
+    backgroundColor: Colors.backgroundSecondary,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontSize: FontSizes.sm,
+    color: Colors.text,
+    borderWidth: 1,
+    borderColor: Colors.border,
     marginBottom: Spacing.lg,
   },
   validateButton: {
@@ -522,6 +810,110 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
+  },
+  questionPreview: {
+    backgroundColor: Colors.backgroundSecondary,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  questionPreviewText: {
+    fontSize: FontSizes.md,
+    color: Colors.text,
+    fontStyle: 'italic',
+  },
+  foundAnswerContainer: {
+    backgroundColor: Colors.backgroundSecondary,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.primary,
+  },
+  foundAnswerLabel: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.xs,
+  },
+  foundAnswerValue: {
+    fontSize: 36,
+    fontWeight: FontWeights.bold,
+    color: Colors.primary,
+  },
+  foundAnswerUnits: {
+    fontSize: FontSizes.md,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
+  },
+  confirmText: {
+    fontSize: FontSizes.md,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+  searchLink: {
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.lg,
+  },
+  searchLinkText: {
+    fontSize: FontSizes.sm,
+    color: Colors.primary,
+    textDecorationLine: 'underline',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  primaryButton: {
+    flex: 1,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.full,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+  },
+  primaryButtonText: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semibold,
+    color: Colors.primaryForeground,
+  },
+  secondaryButton: {
+    flex: 1,
+    backgroundColor: Colors.backgroundSecondary,
+    borderRadius: BorderRadius.full,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  secondaryButtonText: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semibold,
+    color: Colors.text,
+  },
+  editQuestionButton: {
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+  },
+  editQuestionText: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    textDecorationLine: 'underline',
+  },
+  customAnswerInput: {
+    backgroundColor: Colors.backgroundSecondary,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontSize: FontSizes.xl,
+    color: Colors.text,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
   },
   waitingText: {
     fontSize: FontSizes.lg,
@@ -591,7 +983,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Colors.primary,
+    borderColor: '#3B82F6',
   },
   answerLabel: {
     fontSize: FontSizes.sm,
@@ -601,7 +993,12 @@ const styles = StyleSheet.create({
   answerValue: {
     fontSize: 32,
     fontWeight: FontWeights.bold,
-    color: Colors.primary,
+    color: '#3B82F6',
+  },
+  answerUnits: {
+    fontSize: FontSizes.md,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
   },
   progressContainer: {
     alignItems: 'center',
@@ -689,5 +1086,85 @@ const styles = StyleSheet.create({
   waitingNextText: {
     fontSize: FontSizes.md,
     color: Colors.textSecondary,
+  },
+  standingsTitle: {
+    fontSize: 32,
+    fontWeight: FontWeights.bold,
+    color: Colors.text,
+    marginBottom: Spacing.md,
+    textAlign: 'center',
+  },
+  standingsHeader: {
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  standingsRound: {
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.semibold,
+    color: Colors.text,
+    marginBottom: Spacing.xs,
+  },
+  standingsWinCondition: {
+    fontSize: FontSizes.md,
+    color: Colors.textSecondary,
+  },
+  standingsList: {
+    marginBottom: Spacing.lg,
+  },
+  standingItem: {
+    backgroundColor: Colors.backgroundSecondary,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  standingFirst: {
+    borderColor: '#FFD700',
+    backgroundColor: '#FFD70020',
+  },
+  standingLast: {
+    borderColor: '#8B4513',
+    backgroundColor: '#8B451320',
+  },
+  standingCurrent: {
+    borderWidth: 2,
+  },
+  standingRank: {
+    width: 40,
+    alignItems: 'center',
+  },
+  standingRankText: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semibold,
+    color: Colors.textSecondary,
+  },
+  standingInfo: {
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  standingNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  standingName: {
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.semibold,
+    color: Colors.text,
+  },
+  standingEmoji: {
+    fontSize: 20,
+    marginLeft: Spacing.sm,
+  },
+  standingScore: {
+    minWidth: 50,
+    alignItems: 'flex-end',
+  },
+  standingScoreText: {
+    fontSize: 24,
+    fontWeight: FontWeights.bold,
+    color: Colors.primary,
   },
 });

@@ -2,7 +2,7 @@
 
 export type GameMode = 'rounds' | 'score';
 
-export type GameStatus = 'waiting' | 'question_entry' | 'guessing' | 'results' | 'ended';
+export type GameStatus = 'waiting' | 'question_entry' | 'guessing' | 'results' | 'standings' | 'ended';
 
 export interface GameConfig {
   gameMode: GameMode;

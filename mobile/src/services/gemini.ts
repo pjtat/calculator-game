@@ -1,9 +1,10 @@
 // Gemini API service for question validation
 import Constants from 'expo-constants';
 
+// Gemini API key from app.config.ts extra (with local dev fallback)
 const extra = Constants.expoConfig?.extra;
-const GEMINI_API_KEY = extra?.geminiApiKey;
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_API_KEY = extra?.geminiApiKey || 'AIzaSyCfroyB_c7iHwGfpSfQM3xnIysKXJBAjSI';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent';
 
 export interface QuestionValidationResult {
   isValid: boolean;
@@ -13,11 +14,15 @@ export interface QuestionValidationResult {
   reasoning?: string;
 }
 
-export const validateQuestion = async (question: string): Promise<QuestionValidationResult> => {
+export const validateQuestion = async (question: string, preferredUnits?: string): Promise<QuestionValidationResult> => {
   try {
+    const unitsInstruction = preferredUnits
+      ? `\nPreferred units: ${preferredUnits} (convert the answer to these units if possible)`
+      : '';
+
     const prompt = `You are helping validate a trivia estimation question for a multiplayer game.
 
-Question: "${question}"
+Question: "${question}"${unitsInstruction}
 
 Your task:
 1. Determine if this question has a single, factual, quantifiable numeric answer.
@@ -27,9 +32,10 @@ Your task:
 
 Important guidelines:
 - The answer must be a concrete number (not a range)
-- The answer should be factual and verifiable
-- Reject questions that are too subjective or opinion-based
-- Reject questions that change frequently (e.g., "How many followers does @user have right now?")
+- This is a casual party game - approximate answers using the most recent reliable data are perfectly acceptable
+- Accept questions about populations, prices, statistics, etc. using the latest available figures
+- Only reject questions that are truly opinion-based or completely unknowable
+- Reject questions about real-time data that changes by the minute (e.g., "How many followers does @user have right now?")
 - Accept historical facts with numeric answers (e.g., "How many people attended Woodstock?")
 - For count questions without explicit units, use "items" or a contextual noun (e.g., "people", "restaurants", "countries")
 
@@ -60,7 +66,8 @@ ONLY respond with the JSON object, nothing else.`;
         ],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 256,
+          maxOutputTokens: 1024,
+          responseMimeType: 'application/json',
         },
       }),
     });

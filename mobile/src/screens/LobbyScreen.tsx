@@ -126,7 +126,7 @@ export default function LobbyScreen({ navigation, route }: LobbyScreenProps) {
       {/* Players List */}
       <View style={styles.playersContainer}>
         <Text style={styles.playersHeader}>
-          Players ({playerCount}) {playerCount < 2 && '(Need at least 2)'}
+          Players {playerCount < 2 && '(Need at least 2)'}
         </Text>
         <ScrollView style={styles.playersList} contentContainerStyle={styles.playersListContent}>
           {players.map((player, index) => (
