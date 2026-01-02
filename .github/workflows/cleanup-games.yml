@@ -1,0 +1,50 @@
+name: Cleanup Old Games
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run cleanup script
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          npm install firebase-admin
+          node -e "
+            const admin = require('firebase-admin');
+            const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+            admin.initializeApp({
+              credential: admin.credential.cert(serviceAccount),
+              databaseURL: 'https://calculator-game-1690a-default-rtdb.firebaseio.com'
+            });
+
+            const db = admin.database();
+            const cutoff = Date.now() - (24 * 60 * 60 * 1000);
+
+            db.ref('games').once('value').then(snapshot => {
+              const deletions = [];
+              snapshot.forEach(game => {
+                if (game.val().config?.createdAt < cutoff) {
+                  console.log('Deleting:', game.key);
+                  deletions.push(game.ref.remove());
+                }
+              });
+              return Promise.all(deletions);
+            }).then(results => {
+              console.log('Deleted', results.length, 'games');
+              process.exit(0);
+            }).catch(err => {
+              console.error(err);
+              process.exit(1);
+            });
+          "
