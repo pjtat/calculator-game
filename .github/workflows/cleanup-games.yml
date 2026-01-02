@@ -1,4 +1,4 @@
- name: Cleanup Old Games
+name: Cleanup Old Games
 
 on:
   schedule:
