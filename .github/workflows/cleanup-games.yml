@@ -1,4 +1,4 @@
-name: Cleanup Old Games
+ name: Cleanup Old Games
 
 on:
   schedule:
@@ -17,6 +17,7 @@ jobs:
       - name: Run cleanup script
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_DB_URL: ${{ secrets.FIREBASE_DB_URL }}
         run: |
           npm install firebase-admin
           node -e "
@@ -25,11 +26,11 @@ jobs:
 
             admin.initializeApp({
               credential: admin.credential.cert(serviceAccount),
-              databaseURL: 'https://calculator-game-1690a-default-rtdb.firebaseio.com'
+              databaseURL: process.env.FIREBASE_DB_URL
             });
 
             const db = admin.database();
-            const cutoff = Date.now() - (24 * 60 * 60 * 1000);
+            const cutoff = Date.now() - (30 * 24 * 60 * 60 * 1000); // 30 days
 
             db.ref('games').once('value').then(snapshot => {
               const deletions = [];
