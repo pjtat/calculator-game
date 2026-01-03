@@ -2,7 +2,7 @@
 
 export type GameMode = 'rounds' | 'score';
 
-export type GameStatus = 'waiting' | 'question_entry' | 'guessing' | 'results' | 'standings' | 'ended';
+export type GameStatus = 'waiting' | 'question_entry' | 'guessing' | 'results' | 'best_worst_reveal' | 'standings' | 'ended';
 
 export interface GameConfig {
   gameMode: GameMode;
@@ -46,6 +46,7 @@ export interface RoundResult {
   loser: string;
   correctAnswer: number;
   rankings: RoundRanking[];
+  snarkyRemark?: string | null;
 }
 
 export interface Game {

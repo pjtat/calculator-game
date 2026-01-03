@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { View, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, Text, Animated, Dimensions } from 'react-native';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../../constants/theme';
 import type { RoundRanking, Player } from '../../types/game';
+import { selection, mediumTap, success } from '../../utils/haptics';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SCALE_HEIGHT = SCREEN_HEIGHT * 0.68; // Use 68% of screen for scale (leaves room for button)
@@ -46,16 +47,6 @@ function getDistanceColor(guess: number | null, correctAnswer: number): string {
   if (percentError <= 10) return '#4CAF50'; // Green - close
   if (percentError <= 50) return '#FF9800'; // Orange - medium
   return '#FF4444'; // Red - far
-}
-
-// Shuffle array (Fisher-Yates)
-function shuffleArray<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
 }
 
 // Calculate spaced label positions to prevent overlap
@@ -142,11 +133,8 @@ export default function AnswerReveal({
   const [phase, setPhase] = useState<RevealPhase>('drumroll');
   const [revealedGuessIndex, setRevealedGuessIndex] = useState(-1);
   const [revealedNameIndex, setRevealedNameIndex] = useState(-1);
-
-  // Random order for guess reveals (memoized so it doesn't change)
-  const guessRevealOrder = useMemo(() => {
-    return shuffleArray(rankings.map((_, i) => i));
-  }, [rankings.length]);
+  const [slotMachineNumber, setSlotMachineNumber] = useState<number>(correctAnswer);
+  const [isSlotMachineSpinning, setIsSlotMachineSpinning] = useState<boolean>(false);
 
   // Calculate vertical positions for all values
   const scaleData = useMemo(() => {
@@ -205,6 +193,18 @@ export default function AnswerReveal({
   const nameAnims = useRef(rankings.map(() => new Animated.Value(0))).current;
   const buttonOpacity = useRef(new Animated.Value(0)).current;
 
+  // Calculate zoom translation to center the correct answer when zoomed in
+  const zoomTranslation = useMemo(() => {
+    const centerY = SCREEN_HEIGHT * 0.4; // Center in visible area (accounting for header)
+    const correctAnswerY = scaleData.correctDotPosition;
+    // When zoomed, we need less translation (zoom already magnifies the offset)
+    return (centerY - correctAnswerY) * 1.0;
+  }, [scaleData.correctDotPosition]);
+
+  // Zoom animations - start zoomed in on correct answer (1.3x ensures full width visible)
+  const zoomScale = useRef(new Animated.Value(1.3)).current;
+  const zoomTranslateY = useRef(new Animated.Value(0)).current;
+
   // Drumroll pulse animation
   useEffect(() => {
     if (phase === 'drumroll') {
@@ -227,9 +227,16 @@ export default function AnswerReveal({
     }
   }, [phase]);
 
-  // Answer phase - scale line grows, correct answer appears
+  // Answer phase - scale line grows, slot machine spins, correct answer appears
   useEffect(() => {
     if (phase === 'answer') {
+      // Haptic when answer phase begins
+      mediumTap();
+
+      // Ensure zoom is set to zoomed in position
+      zoomScale.setValue(1.3);
+      zoomTranslateY.setValue(zoomTranslation);
+
       // Grow the scale line
       Animated.timing(scaleLineHeight, {
         toValue: SCALE_HEIGHT,
@@ -253,20 +260,65 @@ export default function AnswerReveal({
           }),
         ]).start();
       }, 800);
-    }
-  }, [phase]);
 
-  // Guesses phase - reveal guesses one by one in random order
+      // Slot machine effect - spin numbers at readable speed within 200% of correct answer
+      setIsSlotMachineSpinning(true);
+      const spinInterval = setInterval(() => {
+        // Generate random number within 50% to 200% of correct answer (reasonable range)
+        const minValue = Math.max(1, correctAnswer * 0.5);
+        const maxValue = correctAnswer * 2;
+        const randomNum = minValue + Math.random() * (maxValue - minValue);
+        setSlotMachineNumber(Math.round(randomNum));
+      }, 150); // Slower for readability
+
+      // Stop spinning and reveal correct answer after 4200ms
+      const stopSpinTimeout = setTimeout(() => {
+        clearInterval(spinInterval);
+        setSlotMachineNumber(correctAnswer);
+        setIsSlotMachineSpinning(false);
+        success(); // Haptic when correct answer locks in
+      }, 4200);
+
+      return () => {
+        clearInterval(spinInterval);
+        clearTimeout(stopSpinTimeout);
+      };
+    }
+  }, [phase, correctAnswer, zoomTranslation]);
+
+  // Guesses phase - zoom out animation starts when phase begins
+  useEffect(() => {
+    if (phase === 'guesses') {
+      // Calculate total duration for all guess reveals (slower pacing)
+      const totalRevealDuration = 1500 + (rankings.length - 1) * 2000;
+
+      // Zoom out and center simultaneously
+      Animated.parallel([
+        Animated.timing(zoomScale, {
+          toValue: 1,
+          duration: totalRevealDuration,
+          useNativeDriver: true,
+        }),
+        Animated.timing(zoomTranslateY, {
+          toValue: 0,
+          duration: totalRevealDuration,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [phase, rankings.length]);
+
+  // Guesses phase - reveal guesses one by one in best-to-worst order
   useEffect(() => {
     if (phase === 'guesses' && revealedGuessIndex >= 0) {
-      const actualIndex = guessRevealOrder[revealedGuessIndex];
+      selection(); // Haptic for each guess reveal
       Animated.parallel([
-        Animated.timing(guessAnims[actualIndex].opacity, {
+        Animated.timing(guessAnims[revealedGuessIndex].opacity, {
           toValue: 1,
           duration: 500,
           useNativeDriver: true,
         }),
-        Animated.spring(guessAnims[actualIndex].scale, {
+        Animated.spring(guessAnims[revealedGuessIndex].scale, {
           toValue: 1,
           tension: 80,
           friction: 10,
@@ -279,6 +331,12 @@ export default function AnswerReveal({
   // Identities phase - reveal names best to worst
   useEffect(() => {
     if (phase === 'identities' && revealedNameIndex >= 0) {
+      // Winner gets success haptic, others get selection
+      if (revealedNameIndex === 0) {
+        success();
+      } else {
+        selection();
+      }
       Animated.timing(nameAnims[revealedNameIndex], {
         toValue: 1,
         duration: 600,
@@ -307,13 +365,14 @@ export default function AnswerReveal({
         timer = setTimeout(() => setPhase('answer'), 3000);
         break;
       case 'answer':
-        timer = setTimeout(() => setPhase('guesses'), 2500);
+        // Wait for slot machine (4200ms) + pause to appreciate bolded answer (1500ms) before starting guesses
+        timer = setTimeout(() => setPhase('guesses'), 5700);
         break;
       case 'guesses':
         if (revealedGuessIndex < rankings.length - 1) {
           timer = setTimeout(() => {
             setRevealedGuessIndex(prev => prev + 1);
-          }, revealedGuessIndex === -1 ? 600 : 800);
+          }, revealedGuessIndex === -1 ? 1500 : 2000);
         } else {
           timer = setTimeout(() => setPhase('identities'), 3000);
         }
@@ -347,8 +406,14 @@ export default function AnswerReveal({
       });
       nameAnims.forEach(anim => anim.setValue(1));
       buttonOpacity.setValue(1);
+      // Reset zoom animations
+      zoomScale.setValue(1);
+      zoomTranslateY.setValue(0);
+      // Show correct answer (not slot machine number)
+      setSlotMachineNumber(correctAnswer);
+      setIsSlotMachineSpinning(false);
     }
-  }, [phase, rankings.length]);
+  }, [phase, rankings.length, correctAnswer]);
 
   return (
     <TouchableWithoutFeedback onPress={handleSkip}>
@@ -373,6 +438,15 @@ export default function AnswerReveal({
         {/* Phase 2+: Vertical Scale */}
         {phase !== 'drumroll' && (
           <View style={styles.scaleContainer}>
+            <Animated.View
+              style={{
+                flex: 1,
+                transform: [
+                  { scale: zoomScale },
+                  { translateY: zoomTranslateY }
+                ]
+              }}
+            >
             {/* Vertical scale line */}
             <Animated.View style={[styles.scaleLine, { height: scaleLineHeight }]} />
 
@@ -403,8 +477,11 @@ export default function AnswerReveal({
               ]}
             >
               <View style={[styles.leaderLine, { backgroundColor: '#3B82F6' }]} />
-              <Text style={styles.correctAnswerValue}>
-                {correctAnswer.toLocaleString()}
+              <Text style={[
+                styles.correctAnswerValue,
+                isSlotMachineSpinning && styles.correctAnswerValueSpinning
+              ]}>
+                {slotMachineNumber.toLocaleString()}
               </Text>
               {units && <Text style={styles.correctAnswerUnits}> {units}</Text>}
             </Animated.View>
@@ -486,19 +563,11 @@ export default function AnswerReveal({
                       {player?.nickname || 'Unknown'}
                       {ranking.playerId === currentPlayerId && ' (You)'}
                     </Text>
-                    {(isWinner || isLoser) && (
-                      <Text style={[
-                        styles.pointsText,
-                        isWinner && styles.pointsPositive,
-                        isLoser && styles.pointsNegative,
-                      ]}>
-                        {isWinner ? '+1' : '-1'}
-                      </Text>
-                    )}
                   </Animated.View>
                 </Animated.View>
               );
             })}
+            </Animated.View>
           </View>
         )}
 
@@ -590,7 +659,7 @@ const styles = StyleSheet.create({
   // Correct answer dot
   correctDotContainer: {
     position: 'absolute',
-    left: Spacing.md - 2, // Aligned with guess dots
+    left: Spacing.md - 8.5, // Centered on the line (line center at Spacing.md + 1.5, dot is 20px wide)
     zIndex: 10,
   },
   correctMarkerDot: {
@@ -621,6 +690,9 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.lg,
     fontWeight: FontWeights.bold,
   },
+  correctAnswerValueSpinning: {
+    fontWeight: FontWeights.normal, // Unbold while spinning
+  },
   correctAnswerUnits: {
     color: '#3B82F6',
     fontSize: FontSizes.lg,
@@ -629,7 +701,7 @@ const styles = StyleSheet.create({
   // Guess dots (on the scale line)
   guessDotContainer: {
     position: 'absolute',
-    left: Spacing.md - 2,
+    left: Spacing.md - 6.5, // Centered on the line (line center at Spacing.md + 1.5, dot is 16px wide)
     zIndex: 5,
   },
   guessMarkerDot: {

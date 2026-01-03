@@ -10,9 +10,11 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '../constants/theme';
+import { Colors, Spacing, BorderRadius, FontSizes, FontWeights, Shadows } from '../constants/theme';
 import { listenToGame } from '../services/firebase';
 import { Game, Player } from '../types/game';
+import Confetti from '../components/Confetti';
+import AnimatedNumber from '../components/AnimatedNumber';
 
 type GameEndScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'GameEnd'>;
@@ -56,6 +58,9 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
 
   return (
     <View style={styles.container}>
+      {/* Confetti for winner */}
+      {isCurrentPlayerWinner && <Confetti count={60} duration={4000} />}
+
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
@@ -65,7 +70,12 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
         <View style={styles.winnerSection}>
           <Text style={styles.winnerLabel}>🏆 Winner 🏆</Text>
           <Text style={styles.winnerName}>{winner?.nickname}</Text>
-          <Text style={styles.winnerScore}>{winner?.score} points</Text>
+          <AnimatedNumber
+            value={winner?.score || 0}
+            style={styles.winnerScore}
+            suffix=" points"
+            duration={800}
+          />
         </View>
 
         {/* Runner Up */}
@@ -121,7 +131,11 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
                   <Text style={styles.standingYou}>(You)</Text>
                 )}
               </View>
-              <Text style={styles.standingScore}>{player.score}</Text>
+              <AnimatedNumber
+                value={player.score}
+                style={styles.standingScore}
+                duration={600}
+              />
             </View>
           ))}
         </View>
@@ -310,6 +324,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
     paddingVertical: Spacing.md,
     alignItems: 'center',
+    ...Shadows.md,
   },
   homeButtonText: {
     fontSize: FontSizes.lg,

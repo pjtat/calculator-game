@@ -14,7 +14,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
-import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '../constants/theme';
+import { Colors, Spacing, BorderRadius, FontSizes, FontWeights, Shadows } from '../constants/theme';
 import {
   listenToGame,
   submitQuestion,
@@ -23,12 +23,17 @@ import {
   moveToStandings,
   advanceToNextRound,
 } from '../services/firebase';
+import { getDatabase, ref, update } from 'firebase/database';
 import { validateQuestion, convertUnits } from '../services/gemini';
 import { Game, RoundRanking } from '../types/game';
 import Calculator from '../components/Calculator';
 import Timer from '../components/Timer';
 import DemoControls from '../components/DemoControls';
 import AnswerReveal from '../components/AnswerReveal';
+import BestWorstReveal from '../components/BestWorstReveal';
+import BinaryLoader from '../components/BinaryLoader';
+import AnimatedNumber from '../components/AnimatedNumber';
+import { success, mediumTap } from '../utils/haptics';
 
 type GameScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Game'>;
@@ -251,6 +256,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     }
 
     try {
+      success(); // Haptic feedback on successful submission
       await submitGuess(gameCode, game!.currentRound, playerId, guessValue, guessCalculation);
       setHasSubmittedGuess(true);
     } catch (error) {
@@ -283,6 +289,18 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
   };
 
   // ========== Results Functions ==========
+
+  const handleContinueFromResults = async () => {
+    try {
+      const database = getDatabase();
+      await update(ref(database, `games/${gameCode}`), {
+        status: 'best_worst_reveal',
+      });
+    } catch (error) {
+      console.error('Error moving to best/worst:', error);
+      Alert.alert('Error', 'Failed to continue. Please try again.');
+    }
+  };
 
   const handleViewStandings = async () => {
     try {
@@ -385,6 +403,31 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
             players={game.players}
             currentPlayerId={playerId}
             units={game.currentQuestion?.units}
+            onComplete={handleContinueFromResults}
+            canContinue={game.nextAsker === playerId}
+            nextAskerName={game.players[game.nextAsker]?.nickname}
+          />
+        )}
+
+        {game.status === 'best_worst_reveal' && game.roundResults[`round_${game.currentRound}`] && (
+          <BestWorstReveal
+            bestPlayer={{
+              id: game.roundResults[`round_${game.currentRound}`].rankings[0]?.playerId || '',
+              name: game.players[game.roundResults[`round_${game.currentRound}`].rankings[0]?.playerId]?.nickname || 'Unknown',
+              guess: game.roundResults[`round_${game.currentRound}`].rankings[0]?.guess ?? 0,
+              percentError: game.roundResults[`round_${game.currentRound}`].rankings[0]?.percentageError ?? null,
+            }}
+            worstPlayer={{
+              id: game.roundResults[`round_${game.currentRound}`].rankings[game.roundResults[`round_${game.currentRound}`].rankings.length - 1]?.playerId || '',
+              name: game.players[game.roundResults[`round_${game.currentRound}`].rankings[game.roundResults[`round_${game.currentRound}`].rankings.length - 1]?.playerId]?.nickname || 'Unknown',
+              guess: game.roundResults[`round_${game.currentRound}`].rankings[game.roundResults[`round_${game.currentRound}`].rankings.length - 1]?.guess ?? 0,
+              percentError: game.roundResults[`round_${game.currentRound}`].rankings[game.roundResults[`round_${game.currentRound}`].rankings.length - 1]?.percentageError ?? null,
+            }}
+            correctAnswer={game.roundResults[`round_${game.currentRound}`].correctAnswer}
+            questionText={game.currentQuestion?.text || ''}
+            units={game.currentQuestion?.units}
+            snarkyRemark={game.roundResults[`round_${game.currentRound}`].snarkyRemark || null}
+            currentPlayerId={playerId}
             onComplete={handleViewStandings}
             canContinue={game.nextAsker === playerId}
             nextAskerName={game.players[game.nextAsker]?.nickname}
@@ -621,7 +664,7 @@ function QuestionEntryView({
 function WaitingForQuestionView({ askerName }: any) {
   return (
     <View style={styles.centeredContainer}>
-      <ActivityIndicator size="large" color={Colors.primary} />
+      <BinaryLoader />
       <Text style={styles.waitingText}>Waiting for {askerName} to ask a question...</Text>
     </View>
   );
@@ -846,7 +889,14 @@ function StandingsView({ game, playerId, onNextRound }: any) {
                 </View>
               </View>
               <View style={styles.standingScore}>
-                <Text style={styles.standingScoreText}>{standing.score}</Text>
+                {standing.score !== 0 && (
+                  <AnimatedNumber
+                    value={standing.score}
+                    style={styles.standingScoreText}
+                    prefix={standing.score > 0 ? '+' : ''}
+                    duration={600}
+                  />
+                )}
               </View>
             </View>
           );
@@ -950,6 +1000,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
     paddingVertical: Spacing.md,
     alignItems: 'center',
+    ...Shadows.md,
   },
   validateButtonText: {
     fontSize: FontSizes.lg,
@@ -1050,6 +1101,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
     paddingVertical: Spacing.md,
     alignItems: 'center',
+    ...Shadows.md,
   },
   primaryButtonText: {
     fontSize: FontSizes.md,
@@ -1252,6 +1304,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
     paddingVertical: Spacing.md,
     alignItems: 'center',
+    ...Shadows.md,
   },
   nextButtonText: {
     fontSize: FontSizes.lg,

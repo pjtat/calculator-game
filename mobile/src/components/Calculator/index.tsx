@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '../../constants/theme';
+import { lightTap, mediumTap, heavyTap } from '../../utils/haptics';
 
 interface CalculatorProps {
   onCalculationChange: (value: number | null, history: string) => void;
@@ -55,6 +56,7 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
 
   const handleNumberPress = (num: string) => {
     if (disabled) return;
+    lightTap();
 
     if (shouldResetDisplay) {
       setDisplayValue(num);
@@ -67,6 +69,7 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
 
   const handleOperationPress = (op: string) => {
     if (disabled) return;
+    mediumTap();
 
     const currentValue = parseFloat(displayValue.replace(/,/g, ''));
 
@@ -86,6 +89,7 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
 
   const handleEquals = () => {
     if (disabled) return;
+    heavyTap();
 
     if (previousValue !== null && operation !== null) {
       const currentValue = parseFloat(displayValue.replace(/,/g, ''));
@@ -104,6 +108,7 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
 
   const handleClear = () => {
     if (disabled) return;
+    mediumTap();
 
     setDisplayValue('');
     setPreviousValue(null);
@@ -114,6 +119,7 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
 
   const handleBackspace = () => {
     if (disabled) return;
+    lightTap();
 
     const cleanValue = displayValue.replace(/,/g, '');
     if (cleanValue.length > 1) {
@@ -125,6 +131,7 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
 
   const handleDecimal = () => {
     if (disabled) return;
+    lightTap();
 
     const cleanValue = displayValue.replace(/,/g, '');
     if (shouldResetDisplay) {
@@ -137,6 +144,7 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
 
   const handleToggleSign = () => {
     if (disabled) return;
+    lightTap();
 
     const cleanValue = displayValue.replace(/,/g, '');
     const numValue = parseFloat(cleanValue);

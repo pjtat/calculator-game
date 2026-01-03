@@ -306,6 +306,163 @@ export const getDemoGameResults = (): Game => {
   };
 };
 
+export const getDemoGameBestWorstReveal = (): Game => {
+  const game = getDemoGame('best_worst_reveal');
+  return {
+    ...game,
+    currentRound: 1,
+    currentQuestion: {
+      text: 'How many people live in Tokyo?',
+      answer: 37400000,
+      units: 'people',
+      askedBy: 'demo-player-2',
+      submittedAt: Date.now(),
+    },
+    guesses: {
+      round_1: {
+        'demo-player-3': {
+          value: 37000000,
+          calculation: '37 * 1000000',
+          submittedAt: Date.now(),
+        },
+        [DEMO_PLAYER_ID]: {
+          value: 35000000,
+          calculation: '30000000 + 5000000',
+          submittedAt: Date.now(),
+        },
+        'demo-player-4': {
+          value: 40000000,
+          calculation: '40 * 1000000',
+          submittedAt: Date.now(),
+        },
+        'demo-player-5': {
+          value: 30000000,
+          calculation: '30 * 1000000',
+          submittedAt: Date.now(),
+        },
+        'demo-player-6': {
+          value: 45000000,
+          calculation: '45 * 1000000',
+          submittedAt: Date.now(),
+        },
+        'demo-player-7': {
+          value: 20000000,
+          calculation: '20 * 1000000',
+          submittedAt: Date.now(),
+        },
+        'demo-player-8': {
+          value: 300000000, // Hilariously bad guess!
+          calculation: '300 * 1000000',
+          submittedAt: Date.now(),
+        },
+      },
+    },
+    roundResults: {
+      round_1: {
+        correctAnswer: 37400000,
+        rankings: [
+          {
+            playerId: 'demo-player-3',
+            guess: 37000000,
+            percentageError: 1.1,
+            pointsAwarded: 1,
+          },
+          {
+            playerId: DEMO_PLAYER_ID,
+            guess: 35000000,
+            percentageError: 6.4,
+            pointsAwarded: 0,
+          },
+          {
+            playerId: 'demo-player-4',
+            guess: 40000000,
+            percentageError: 7.0,
+            pointsAwarded: 0,
+          },
+          {
+            playerId: 'demo-player-5',
+            guess: 30000000,
+            percentageError: 19.8,
+            pointsAwarded: 0,
+          },
+          {
+            playerId: 'demo-player-6',
+            guess: 45000000,
+            percentageError: 20.3,
+            pointsAwarded: 0,
+          },
+          {
+            playerId: 'demo-player-7',
+            guess: 20000000,
+            percentageError: 46.5,
+            pointsAwarded: 0,
+          },
+          {
+            playerId: 'demo-player-8',
+            guess: 300000000,
+            percentageError: 702.1,
+            pointsAwarded: -1,
+          },
+        ],
+        winner: 'demo-player-3',
+        loser: 'demo-player-8',
+        snarkyRemark: "Yikes... that's almost the entire population of the United States! 😬",
+      },
+    },
+    nextAsker: 'demo-player-3',
+    players: {
+      [DEMO_PLAYER_ID]: {
+        nickname: 'You (Demo)',
+        score: 0,
+        isHost: true,
+        joinedAt: Date.now(),
+      },
+      'demo-player-2': {
+        nickname: 'Alice',
+        score: 0,
+        isHost: false,
+        joinedAt: Date.now(),
+      },
+      'demo-player-3': {
+        nickname: 'Bob',
+        score: 1,
+        isHost: false,
+        joinedAt: Date.now(),
+      },
+      'demo-player-4': {
+        nickname: 'Charlie',
+        score: 0,
+        isHost: false,
+        joinedAt: Date.now(),
+      },
+      'demo-player-5': {
+        nickname: 'Diana',
+        score: 0,
+        isHost: false,
+        joinedAt: Date.now(),
+      },
+      'demo-player-6': {
+        nickname: 'Ethan',
+        score: 0,
+        isHost: false,
+        joinedAt: Date.now(),
+      },
+      'demo-player-7': {
+        nickname: 'Fiona',
+        score: 0,
+        isHost: false,
+        joinedAt: Date.now(),
+      },
+      'demo-player-8': {
+        nickname: 'George',
+        score: -1,
+        isHost: false,
+        joinedAt: Date.now(),
+      },
+    },
+  };
+};
+
 export const getDemoGameStandings = (): Game => {
   const game = getDemoGame('standings');
   return {
@@ -366,49 +523,49 @@ export const getDemoGameStandings = (): Game => {
     players: {
       [DEMO_PLAYER_ID]: {
         nickname: 'You (Demo)',
-        score: 8,
+        score: 0,
         isHost: true,
         joinedAt: Date.now(),
       },
       'demo-player-2': {
         nickname: 'Alice',
-        score: 5,
+        score: 0,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-3': {
         nickname: 'Bob',
-        score: 9,
+        score: 1,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-4': {
         nickname: 'Charlie',
-        score: 4,
+        score: 0,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-5': {
         nickname: 'Diana',
-        score: 2,
+        score: 0,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-6': {
         nickname: 'Ethan',
-        score: 1,
+        score: 0,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-7': {
         nickname: 'Fiona',
-        score: -2,
+        score: 0,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-8': {
         nickname: 'George',
-        score: -5,
+        score: -1,
         isHost: false,
         joinedAt: Date.now(),
       },

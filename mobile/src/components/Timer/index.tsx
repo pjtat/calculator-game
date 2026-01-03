@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Colors, FontSizes, FontWeights } from '../../constants/theme';
+import { warning, lightTap } from '../../utils/haptics';
 
 interface TimerProps {
   duration: number; // in seconds
@@ -21,12 +22,41 @@ export default function Timer({
   const [remaining, setRemaining] = useState(duration);
   const [isExpired, setIsExpired] = useState(false);
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pulseAnimRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const size = 120;
   const strokeWidth = 8;
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
+
+  // Pulse animation for low time warning
+  useEffect(() => {
+    if (remaining <= 5 && remaining > 0 && !pulseAnimRef.current) {
+      pulseAnimRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.08,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulseAnimRef.current.start();
+    }
+
+    if (remaining <= 0 && pulseAnimRef.current) {
+      pulseAnimRef.current.stop();
+      pulseAnim.setValue(1);
+      pulseAnimRef.current = null;
+    }
+  }, [remaining, pulseAnim]);
 
   useEffect(() => {
     if (autoStart) {
@@ -36,6 +66,9 @@ export default function Timer({
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+      }
+      if (pulseAnimRef.current) {
+        pulseAnimRef.current.stop();
       }
     };
   }, []);
@@ -57,11 +90,19 @@ export default function Timer({
           onTick(newValue);
         }
 
+        // Haptic feedback for countdown warnings
+        if (newValue === 10) {
+          warning(); // Strong warning at 10 seconds
+        } else if (newValue <= 5 && newValue > 0) {
+          lightTap(); // Tick feedback for last 5 seconds
+        }
+
         if (newValue <= 0) {
           if (intervalRef.current) {
             clearInterval(intervalRef.current);
           }
           setIsExpired(true);
+          warning(); // Final warning when time expires
           onExpire();
           return 0;
         }
@@ -90,7 +131,7 @@ export default function Timer({
   };
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={[styles.container, { transform: [{ scale: pulseAnim }] }]}>
       <Svg width={size} height={size}>
         {/* Background circle */}
         <Circle
@@ -125,7 +166,7 @@ export default function Timer({
         </Text>
         {isExpired && <Text style={styles.expiredText}>Time's up!</Text>}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

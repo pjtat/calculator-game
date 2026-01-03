@@ -26,6 +26,12 @@ export interface UnitConversionResult {
   errorMessage?: string;
 }
 
+export interface SnarkyRemarkResult {
+  success: boolean;
+  remark?: string;
+  errorMessage?: string;
+}
+
 export const validateQuestion = async (question: string): Promise<QuestionValidationResult> => {
   console.log('validateQuestion called with:', { question });
   console.log('API Key present:', !!GEMINI_API_KEY, 'Key length:', GEMINI_API_KEY.length);
@@ -225,6 +231,96 @@ ONLY respond with the JSON object, nothing else.`;
     return {
       success: false,
       errorMessage: 'Unable to convert units',
+    };
+  }
+};
+
+export const generateSnarkyRemark = async (
+  questionText: string,
+  correctAnswer: number,
+  worstGuess: number,
+  units?: string
+): Promise<SnarkyRemarkResult> => {
+  if (!GEMINI_API_KEY) {
+    return {
+      success: false,
+      errorMessage: 'Snarky remarks not available right now',
+    };
+  }
+
+  try {
+    const prompt = `You are a hilariously snarky game show host reacting to an absurdly bad guess with playful sass.
+
+Question: "${questionText}"
+Correct Answer: ${correctAnswer} ${units || ''}
+Worst Guess: ${worstGuess} ${units || ''}
+
+Generate a witty, sassy remark that contextualizes how ridiculously far off the worst guess was. Use comparisons to well-known facts or familiar quantities, and add expressive interjections and emojis for extra flair.
+
+Rules:
+- Keep it playfully snarky and fun, not mean or hurtful
+- One sentence only (max 120 characters)
+- Start with an interjection like "Yikes...", "Oof...", "Wow...", "Sheesh..."
+- Include 1-2 relevant emojis (use actual emoji characters like 😬, 👀, 💀, 🤯, 😳)
+- Use specific comparisons when possible
+- Don't mention the player's name
+- Focus on the magnitude of the error with sass
+
+Examples:
+- "Yikes... that's almost the entire population of the United States! 😬"
+- "Oof... that's enough to circle the Earth 3 times! 🌍💀"
+- "Wow... you could buy a small island with that much! 🏝️👀"
+- "Sheesh... that's more people than live in all of Canada! 🤯"
+
+Respond in JSON format:
+{
+  "remark": "<the snarky comment>"
+}
+
+ONLY respond with the JSON object, nothing else.`;
+
+    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 256,
+          responseMimeType: 'application/json',
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!generatedText) {
+      throw new Error('No response from Gemini API');
+    }
+
+    const jsonMatch = generatedText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('Invalid JSON response');
+    }
+
+    const parsedResponse = JSON.parse(jsonMatch[0]);
+
+    return {
+      success: true,
+      remark: parsedResponse.remark || null,
+    };
+  } catch (error) {
+    console.error('Error generating snarky remark with Gemini:', error);
+    return {
+      success: false,
+      errorMessage: 'Unable to generate snarky remark',
     };
   }
 };

@@ -1,9 +1,12 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { initializeAuth, getReactNativePersistence, signInAnonymously, Auth, getAuth } from 'firebase/auth';
+import { initializeAuth, signInAnonymously, Auth, getAuth } from 'firebase/auth';
+// @ts-expect-error - getReactNativePersistence is available in React Native bundle
+import { getReactNativePersistence } from '@firebase/auth/dist/rn/index.js';
 import { getDatabase, ref, set, get, onValue, off, push, update, Database } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Game, Player, Guess, CurrentQuestion, RoundResult } from '../types/game';
+import { generateSnarkyRemark } from './gemini';
 import {
   DEMO_GAME_CODE,
   getDemoGame,
@@ -12,6 +15,7 @@ import {
   getDemoGameGuessing,
   getDemoGameAskerWaiting,
   getDemoGameResults,
+  getDemoGameBestWorstReveal,
   getDemoGameStandings,
   getDemoGameEnd,
 } from './demoData';
@@ -20,13 +24,31 @@ import {
 let demoGameState: Game = getDemoGame('waiting');
 let demoGameListeners: Array<(game: Game) => void> = [];
 
-// Firebase configuration from app.config.ts extra (with local dev fallbacks)
+// Firebase configuration from app.config.ts extra (populated via environment variables)
 const extra = Constants.expoConfig?.extra;
+
+// Validate required environment variables
+const requiredEnvVars = {
+  firebaseApiKey: extra?.firebaseApiKey,
+  firebaseAuthDomain: extra?.firebaseAuthDomain,
+  firebaseDatabaseUrl: extra?.firebaseDatabaseUrl,
+  firebaseProjectId: extra?.firebaseProjectId,
+};
+
+const missingVars = Object.entries(requiredEnvVars)
+  .filter(([_, value]) => !value)
+  .map(([key]) => key);
+
+if (missingVars.length > 0 && !__DEV__) {
+  console.error(`Missing required Firebase environment variables: ${missingVars.join(', ')}`);
+  console.error('Please ensure your .env file is configured or EAS Secrets are set.');
+}
+
 const firebaseConfig = {
-  apiKey: extra?.firebaseApiKey || 'AIzaSyDc1eqon-JZ-FjCoE0pjKQjD0L7XP8DL9U',
-  authDomain: extra?.firebaseAuthDomain || 'calculator-game-1690a.firebaseapp.com',
-  databaseURL: extra?.firebaseDatabaseUrl || 'https://calculator-game-1690a-default-rtdb.firebaseio.com',
-  projectId: extra?.firebaseProjectId || 'calculator-game-1690a',
+  apiKey: extra?.firebaseApiKey ?? '',
+  authDomain: extra?.firebaseAuthDomain ?? '',
+  databaseURL: extra?.firebaseDatabaseUrl ?? '',
+  projectId: extra?.firebaseProjectId ?? '',
 };
 
 // Initialize Firebase (handle hot reload)
@@ -302,12 +324,33 @@ export const calculateAndSubmitResults = async (
     // Determine next asker (winner of this round)
     const winner = rankings[0]?.playerId || game.nextAsker;
 
+    // Generate snarky remark for worst guess
+    let snarkyRemark: string | null = null;
+    const worstRanking = rankings[rankings.length - 1];
+    const worstGuess = worstRanking?.guess;
+
+    if (worstGuess !== null && correctAnswer !== 0) {
+      try {
+        const remarkResult = await generateSnarkyRemark(
+          game.currentQuestion?.text || '',
+          correctAnswer,
+          worstGuess,
+          game.currentQuestion?.units
+        );
+        snarkyRemark = remarkResult.success ? remarkResult.remark || null : null;
+      } catch (error) {
+        console.error('Failed to generate snarky remark:', error);
+        // Continue without remark - don't block game
+      }
+    }
+
     // Create round result
     const result: RoundResult = {
       winner: rankings[0]?.playerId || '',
       loser: rankings[rankings.length - 1]?.playerId || '',
       correctAnswer,
       rankings,
+      snarkyRemark,
     };
 
     // Update game state
@@ -458,6 +501,7 @@ export type DemoScreen =
   | 'guessing'
   | 'asker_waiting'
   | 'results'
+  | 'best_worst_reveal'
   | 'standings'
   | 'game_end';
 
@@ -470,6 +514,7 @@ export const DEMO_SCREENS: { key: DemoScreen; label: string; isNavigation?: bool
   { key: 'guessing', label: 'Guessing Screen' },
   { key: 'asker_waiting', label: 'Asker Waiting' },
   { key: 'results', label: 'Round Results' },
+  { key: 'best_worst_reveal', label: 'Best/Worst Reveal' },
   { key: 'standings', label: 'Standings' },
   { key: 'game_end', label: 'Game End' },
 ];
@@ -494,6 +539,9 @@ export const setDemoScreen = (screen: DemoScreen) => {
       break;
     case 'results':
       updateDemoGame(getDemoGameResults());
+      break;
+    case 'best_worst_reveal':
+      updateDemoGame(getDemoGameBestWorstReveal());
       break;
     case 'standings':
       updateDemoGame(getDemoGameStandings());

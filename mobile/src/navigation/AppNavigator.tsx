@@ -11,6 +11,9 @@ import GameScreen from '../screens/GameScreen';
 import GameEndScreen from '../screens/GameEndScreen';
 import HowToPlayScreen from '../screens/HowToPlayScreen';
 
+// Import transitions
+import { screenTransitions, fade } from '../utils/transitions';
+
 export type RootStackParamList = {
   Home: undefined;
   JoinGame: undefined;
@@ -32,15 +35,16 @@ export default function AppNavigator() {
         screenOptions={{
           headerShown: false, // Hide header for all screens (we'll use custom headers)
           contentStyle: { backgroundColor: '#0A0E1A' }, // Dark background
+          ...fade, // Default transition
         }}
       >
-        <Stack.Screen name="Home" component={HomeScreen} />
-        <Stack.Screen name="CreateGame" component={CreateGameScreen} />
-        <Stack.Screen name="JoinGame" component={JoinGameScreen} />
-        <Stack.Screen name="HowToPlay" component={HowToPlayScreen} />
-        <Stack.Screen name="Lobby" component={LobbyScreen} />
-        <Stack.Screen name="Game" component={GameScreen} />
-        <Stack.Screen name="GameEnd" component={GameEndScreen} />
+        <Stack.Screen name="Home" component={HomeScreen} options={screenTransitions.home} />
+        <Stack.Screen name="CreateGame" component={CreateGameScreen} options={screenTransitions.createGame} />
+        <Stack.Screen name="JoinGame" component={JoinGameScreen} options={screenTransitions.joinGame} />
+        <Stack.Screen name="HowToPlay" component={HowToPlayScreen} options={screenTransitions.howToPlay} />
+        <Stack.Screen name="Lobby" component={LobbyScreen} options={screenTransitions.lobby} />
+        <Stack.Screen name="Game" component={GameScreen} options={screenTransitions.game} />
+        <Stack.Screen name="GameEnd" component={GameEndScreen} options={screenTransitions.gameEnd} />
       </Stack.Navigator>
     </NavigationContainer>
   );
