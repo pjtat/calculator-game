@@ -28,6 +28,7 @@ import { Game, RoundRanking } from '../types/game';
 import Calculator from '../components/Calculator';
 import Timer from '../components/Timer';
 import DemoControls from '../components/DemoControls';
+import AnswerReveal from '../components/AnswerReveal';
 
 type GameScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Game'>;
@@ -376,12 +377,17 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
           />
         )}
 
-        {game.status === 'results' && (
-          <ResultsView
-            game={game}
-            playerId={playerId}
-            isWinner={game.roundResults[`round_${game.currentRound}`]?.winner === playerId}
-            onViewStandings={handleViewStandings}
+        {game.status === 'results' && game.roundResults[`round_${game.currentRound}`] && (
+          <AnswerReveal
+            correctAnswer={game.roundResults[`round_${game.currentRound}`].correctAnswer}
+            questionText={game.currentQuestion?.text || ''}
+            rankings={game.roundResults[`round_${game.currentRound}`].rankings}
+            players={game.players}
+            currentPlayerId={playerId}
+            units={game.currentQuestion?.units}
+            onComplete={handleViewStandings}
+            canContinue={game.nextAsker === playerId}
+            nextAskerName={game.players[game.nextAsker]?.nickname}
           />
         )}
 
@@ -466,9 +472,11 @@ function QuestionEntryView({
           maxLength={30}
         />
 
-        <TouchableOpacity style={styles.searchLink} onPress={onGoogleSearch}>
-          <Text style={styles.searchLinkText}>See Google Results</Text>
-        </TouchableOpacity>
+        <View style={styles.linksRow}>
+          <TouchableOpacity onPress={onGoogleSearch}>
+            <Text style={styles.linkText}>See Google Results</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.secondaryButton} onPress={onReset}>
@@ -539,9 +547,13 @@ function QuestionEntryView({
       <View style={styles.phaseContainer}>
         <Text style={styles.phaseTitle}>Verify Answer</Text>
 
-        <View style={styles.questionPreview}>
-          <Text style={styles.questionPreviewText}>{questionText}</Text>
-        </View>
+        <Text style={styles.questionText}>{questionText}</Text>
+
+        <TouchableOpacity style={styles.editQuestionButton} onPress={onReset}>
+          <Text style={styles.editQuestionText}>Edit Question</Text>
+        </TouchableOpacity>
+
+        <View style={styles.divider} />
 
         <View style={styles.foundAnswerContainer}>
           <Text style={styles.foundAnswerLabel}>Answer:</Text>
@@ -549,15 +561,17 @@ function QuestionEntryView({
           {validatedUnits && <Text style={styles.foundAnswerUnits}>{validatedUnits}</Text>}
         </View>
 
-        <TouchableOpacity style={styles.changeUnitsLink} onPress={onChangeUnits}>
-          <Text style={styles.changeUnitsText}>Change Units</Text>
-        </TouchableOpacity>
-
         <Text style={styles.confirmText}>Does this look correct?</Text>
 
-        <TouchableOpacity style={styles.searchLink} onPress={onGoogleSearch}>
-          <Text style={styles.searchLinkText}>See Google Results</Text>
-        </TouchableOpacity>
+        <View style={styles.linksRow}>
+          <TouchableOpacity onPress={onChangeUnits}>
+            <Text style={styles.linkText}>Change Units</Text>
+          </TouchableOpacity>
+          <Text style={styles.linkSeparator}> | </Text>
+          <TouchableOpacity onPress={onGoogleSearch}>
+            <Text style={styles.linkText}>See Google Results</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.secondaryButton} onPress={onReject}>
@@ -567,10 +581,6 @@ function QuestionEntryView({
             <Text style={styles.primaryButtonText}>Confirm</Text>
           </TouchableOpacity>
         </View>
-
-        <TouchableOpacity style={styles.editQuestionButton} onPress={onReset}>
-          <Text style={styles.editQuestionText}>Edit Question</Text>
-        </TouchableOpacity>
       </View>
     );
   }
@@ -723,6 +733,9 @@ function ResultsView({ game, playerId, isWinner, onViewStandings }: any) {
         {roundResult.rankings.map((ranking: RoundRanking, index: number) => {
           const player = game.players[ranking.playerId];
           const isCurrentPlayer = ranking.playerId === playerId;
+          const difference = ranking.guess !== null
+            ? Math.abs(ranking.guess - roundResult.correctAnswer)
+            : null;
 
           return (
             <View
@@ -735,9 +748,17 @@ function ResultsView({ game, playerId, isWinner, onViewStandings }: any) {
               ]}
             >
               <View style={styles.rankingInfo}>
-                <Text style={styles.rankingName}>{player.nickname}</Text>
-                <Text style={styles.rankingGuess}>
-                  {ranking.guess !== null ? ranking.guess.toLocaleString() : 'No guess'}
+                <Text style={styles.rankingName}>
+                  {player.nickname}
+                  <Text style={styles.rankingGuess}>
+                    {' - '}
+                    {ranking.guess !== null ? ranking.guess.toLocaleString() : 'No guess'}
+                  </Text>
+                  {difference !== null && (
+                    <Text style={styles.rankingDifference}>
+                      {' '}(off by {difference.toLocaleString()})
+                    </Text>
+                  )}
                 </Text>
               </View>
               <View style={styles.rankingPoints}>
@@ -942,7 +963,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
-    marginBottom: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.border,
   },
@@ -950,12 +970,13 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     color: Colors.text,
     fontStyle: 'italic',
+    marginBottom: Spacing.xs,
   },
   foundAnswerContainer: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: BorderRadius.md,
     padding: Spacing.lg,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
     alignItems: 'center',
     borderWidth: 2,
     borderColor: Colors.primary,
@@ -975,15 +996,21 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: Spacing.xs,
   },
-  changeUnitsLink: {
+  linksRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.xs,
-    marginBottom: Spacing.md,
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
   },
-  changeUnitsText: {
+  linkText: {
+    fontSize: FontSizes.sm,
+    color: Colors.primary,
+    textDecorationLine: 'underline',
+  },
+  linkSeparator: {
     fontSize: FontSizes.sm,
     color: Colors.textSecondary,
-    textDecorationLine: 'underline',
+    marginHorizontal: Spacing.xs,
   },
   currentAnswerPreview: {
     backgroundColor: Colors.backgroundSecondary,
@@ -1010,17 +1037,7 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     color: Colors.textSecondary,
     textAlign: 'center',
-    marginBottom: Spacing.sm,
-  },
-  searchLink: {
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    marginBottom: Spacing.lg,
-  },
-  searchLinkText: {
-    fontSize: FontSizes.sm,
-    color: Colors.primary,
-    textDecorationLine: 'underline',
+    marginBottom: Spacing.md,
   },
   buttonRow: {
     flexDirection: 'row',
@@ -1055,7 +1072,8 @@ const styles = StyleSheet.create({
   },
   editQuestionButton: {
     alignItems: 'center',
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    marginBottom: Spacing.sm,
   },
   editQuestionText: {
     fontSize: FontSizes.sm,
@@ -1141,7 +1159,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#3B82F6',
+    borderColor: '#FFA500',
   },
   answerLabel: {
     fontSize: FontSizes.sm,
@@ -1151,7 +1169,7 @@ const styles = StyleSheet.create({
   answerValue: {
     fontSize: 32,
     fontWeight: FontWeights.bold,
-    color: '#3B82F6',
+    color: Colors.text,
   },
   answerUnits: {
     fontSize: FontSizes.md,
@@ -1188,12 +1206,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   rankingWinner: {
-    borderColor: '#4CAF50',
-    backgroundColor: '#4CAF5020',
+    borderColor: '#3B82F6',
   },
   rankingLoser: {
     borderColor: '#FF4444',
-    backgroundColor: '#FF444420',
   },
   rankingCurrent: {
     borderWidth: 2,
@@ -1205,10 +1221,15 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     fontWeight: FontWeights.semibold,
     color: Colors.text,
-    marginBottom: Spacing.xs,
   },
   rankingGuess: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.normal,
+    color: Colors.text,
+  },
+  rankingDifference: {
     fontSize: FontSizes.sm,
+    fontWeight: FontWeights.normal,
     color: Colors.textSecondary,
   },
   rankingPoints: {
@@ -1221,7 +1242,7 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   pointsPositive: {
-    color: '#4CAF50',
+    color: '#3B82F6',
   },
   pointsNegative: {
     color: '#FF4444',
