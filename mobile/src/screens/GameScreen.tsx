@@ -23,7 +23,7 @@ import {
   moveToStandings,
   advanceToNextRound,
 } from '../services/firebase';
-import { validateQuestion } from '../services/gemini';
+import { validateQuestion, convertUnits } from '../services/gemini';
 import { Game, RoundRanking } from '../types/game';
 import Calculator from '../components/Calculator';
 import Timer from '../components/Timer';
@@ -40,7 +40,6 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
 
   // Question Entry state
   const [questionText, setQuestionText] = useState('');
-  const [preferredUnits, setPreferredUnits] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   const [validatedAnswer, setValidatedAnswer] = useState<number | null>(null);
   const [validatedUnits, setValidatedUnits] = useState<string | undefined>(undefined);
@@ -48,6 +47,10 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
   const [isCustomAnswerMode, setIsCustomAnswerMode] = useState(false);
   const [customAnswer, setCustomAnswer] = useState('');
   const [customUnits, setCustomUnits] = useState('');
+  const [showApiErrorFallback, setShowApiErrorFallback] = useState(false);
+  const [isChangingUnits, setIsChangingUnits] = useState(false);
+  const [newUnitsInput, setNewUnitsInput] = useState('');
+  const [isConvertingUnits, setIsConvertingUnits] = useState(false);
 
   // Guessing state
   const [guessValue, setGuessValue] = useState<number | null>(null);
@@ -69,7 +72,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
 
         // Auto-calculate results when all players have guessed
         if (updatedGame.status === 'guessing' && shouldAutoCalculateResults(updatedGame)) {
-          handleTimerExpire();
+          handleTimerExpire(updatedGame);
         }
 
         // Reset guess submission state when moving to next round
@@ -106,14 +109,21 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     setIsValidating(true);
     setShowAnswerPreview(false);
     setIsCustomAnswerMode(false);
+    setShowApiErrorFallback(false);
 
     try {
-      const result = await validateQuestion(questionText.trim(), preferredUnits.trim() || undefined);
+      const result = await validateQuestion(questionText.trim());
 
       if (result.isValid && result.answer !== undefined) {
         setValidatedAnswer(result.answer);
         setValidatedUnits(result.units);
         setShowAnswerPreview(true);
+      } else if (result.isApiError) {
+        // API error - show fallback UI with Google search link and manual entry
+        setIsCustomAnswerMode(true);
+        setShowApiErrorFallback(true);
+        setCustomAnswer('');
+        setCustomUnits('');
       } else {
         Alert.alert(
           'Invalid Question',
@@ -137,7 +147,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
   const handleRejectAnswer = () => {
     setIsCustomAnswerMode(true);
     setCustomAnswer('');
-    setCustomUnits(preferredUnits || validatedUnits || '');
+    setCustomUnits(validatedUnits || '');
   };
 
   const handleSubmitCustomAnswer = () => {
@@ -149,6 +159,50 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     handleConfirmQuestion(parsedAnswer, customUnits || undefined);
   };
 
+  const handleChangeUnits = () => {
+    setIsChangingUnits(true);
+    setNewUnitsInput('');
+  };
+
+  const handleConvertUnits = async () => {
+    if (!newUnitsInput.trim() || validatedAnswer === null) {
+      return;
+    }
+
+    setIsConvertingUnits(true);
+
+    try {
+      const result = await convertUnits(
+        questionText,
+        validatedAnswer,
+        validatedUnits || '',
+        newUnitsInput.trim()
+      );
+
+      if (result.success && result.answer !== undefined) {
+        setValidatedAnswer(result.answer);
+        setValidatedUnits(result.units);
+        setIsChangingUnits(false);
+        setNewUnitsInput('');
+      } else {
+        Alert.alert(
+          'Conversion Failed',
+          result.errorMessage || 'Unable to convert to these units. Try different units or enter your own answer.'
+        );
+      }
+    } catch (error) {
+      console.error('Error converting units:', error);
+      Alert.alert('Error', 'Failed to convert units. Please try again.');
+    } finally {
+      setIsConvertingUnits(false);
+    }
+  };
+
+  const handleCancelChangeUnits = () => {
+    setIsChangingUnits(false);
+    setNewUnitsInput('');
+  };
+
   const handleResetQuestion = () => {
     setShowAnswerPreview(false);
     setIsCustomAnswerMode(false);
@@ -156,6 +210,10 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     setValidatedUnits(undefined);
     setCustomAnswer('');
     setCustomUnits('');
+    setShowApiErrorFallback(false);
+    setIsChangingUnits(false);
+    setNewUnitsInput('');
+    setIsConvertingUnits(false);
   };
 
   const openGoogleSearch = () => {
@@ -167,7 +225,6 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     try {
       await submitQuestion(gameCode, playerId, questionText.trim(), answer, units);
       setQuestionText('');
-      setPreferredUnits('');
       setValidatedAnswer(null);
       setValidatedUnits(undefined);
       setShowAnswerPreview(false);
@@ -201,20 +258,21 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     }
   };
 
-  const handleTimerExpire = async () => {
-    if (!game) return;
+  const handleTimerExpire = async (gameOverride?: Game) => {
+    const currentGame = gameOverride || game;
+    if (!currentGame) return;
 
     // If player hasn't submitted, submit null guess
-    if (!hasSubmittedGuess && game.currentQuestion?.askedBy !== playerId) {
-      await submitGuess(gameCode, game.currentRound, playerId, null, '');
+    if (!hasSubmittedGuess && currentGame.currentQuestion?.askedBy !== playerId) {
+      await submitGuess(gameCode, currentGame.currentRound, playerId, null, '');
       setHasSubmittedGuess(true);
     }
 
     // Calculate results (only one player should do this)
-    if (game.currentQuestion?.askedBy === playerId && !isCalculatingResults) {
+    if (currentGame.currentQuestion?.askedBy === playerId && !isCalculatingResults) {
       setIsCalculatingResults(true);
       try {
-        await calculateAndSubmitResults(gameCode, game.currentRound);
+        await calculateAndSubmitResults(gameCode, currentGame.currentRound);
       } catch (error) {
         console.error('Error calculating results:', error);
       } finally {
@@ -265,8 +323,6 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
           <QuestionEntryView
             questionText={questionText}
             setQuestionText={setQuestionText}
-            preferredUnits={preferredUnits}
-            setPreferredUnits={setPreferredUnits}
             isValidating={isValidating}
             onValidate={handleValidateQuestion}
             showAnswerPreview={showAnswerPreview}
@@ -282,6 +338,14 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
             onSubmitCustom={handleSubmitCustomAnswer}
             onReset={handleResetQuestion}
             onGoogleSearch={openGoogleSearch}
+            showApiErrorFallback={showApiErrorFallback}
+            isChangingUnits={isChangingUnits}
+            newUnitsInput={newUnitsInput}
+            setNewUnitsInput={setNewUnitsInput}
+            isConvertingUnits={isConvertingUnits}
+            onChangeUnits={handleChangeUnits}
+            onConvertUnits={handleConvertUnits}
+            onCancelChangeUnits={handleCancelChangeUnits}
           />
         )}
 
@@ -341,8 +405,6 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
 function QuestionEntryView({
   questionText,
   setQuestionText,
-  preferredUnits,
-  setPreferredUnits,
   isValidating,
   onValidate,
   showAnswerPreview,
@@ -358,15 +420,29 @@ function QuestionEntryView({
   onSubmitCustom,
   onReset,
   onGoogleSearch,
+  showApiErrorFallback,
+  isChangingUnits,
+  newUnitsInput,
+  setNewUnitsInput,
+  isConvertingUnits,
+  onChangeUnits,
+  onConvertUnits,
+  onCancelChangeUnits,
 }: any) {
   // Show custom answer input mode
   if (isCustomAnswerMode) {
     return (
       <View style={styles.phaseContainer}>
         <Text style={styles.phaseTitle}>Enter Your Answer</Text>
-        <Text style={styles.phaseSubtitle}>
-          What's the correct answer to your question?
-        </Text>
+        {showApiErrorFallback ? (
+          <Text style={styles.apiErrorText}>
+            Automatic answers not available right now. Look up the answer and enter it below.
+          </Text>
+        ) : (
+          <Text style={styles.phaseSubtitle}>
+            What's the correct answer to your question?
+          </Text>
+        )}
 
         <View style={styles.questionPreview}>
           <Text style={styles.questionPreviewText}>{questionText}</Text>
@@ -408,6 +484,57 @@ function QuestionEntryView({
 
   // Show answer preview mode
   if (showAnswerPreview && validatedAnswer !== null) {
+    // Show unit conversion input mode
+    if (isChangingUnits) {
+      return (
+        <View style={styles.phaseContainer}>
+          <Text style={styles.phaseTitle}>Change Units</Text>
+          <Text style={styles.phaseSubtitle}>
+            Enter the units you want the answer in
+          </Text>
+
+          <View style={styles.currentAnswerPreview}>
+            <Text style={styles.currentAnswerLabel}>Current:</Text>
+            <Text style={styles.currentAnswerText}>
+              {validatedAnswer.toLocaleString()} {validatedUnits || ''}
+            </Text>
+          </View>
+
+          <TextInput
+            style={styles.unitsInput}
+            placeholder="e.g., meters, kilometers, feet..."
+            placeholderTextColor={Colors.textSecondary}
+            value={newUnitsInput}
+            onChangeText={setNewUnitsInput}
+            maxLength={30}
+            autoFocus={true}
+          />
+
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={onCancelChangeUnits}
+              disabled={isConvertingUnits}
+            >
+              <Text style={styles.secondaryButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.primaryButton, (isConvertingUnits || !newUnitsInput.trim()) && styles.buttonDisabled]}
+              onPress={onConvertUnits}
+              disabled={isConvertingUnits || !newUnitsInput.trim()}
+            >
+              {isConvertingUnits ? (
+                <ActivityIndicator color={Colors.primaryForeground} size="small" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Convert</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    // Normal answer preview mode
     return (
       <View style={styles.phaseContainer}>
         <Text style={styles.phaseTitle}>Verify Answer</Text>
@@ -421,6 +548,10 @@ function QuestionEntryView({
           <Text style={styles.foundAnswerValue}>{validatedAnswer.toLocaleString()}</Text>
           {validatedUnits && <Text style={styles.foundAnswerUnits}>{validatedUnits}</Text>}
         </View>
+
+        <TouchableOpacity style={styles.changeUnitsLink} onPress={onChangeUnits}>
+          <Text style={styles.changeUnitsText}>Change Units</Text>
+        </TouchableOpacity>
 
         <Text style={styles.confirmText}>Does this look correct?</Text>
 
@@ -460,15 +591,6 @@ function QuestionEntryView({
         onChangeText={setQuestionText}
         multiline={true}
         maxLength={200}
-      />
-
-      <TextInput
-        style={styles.unitsInput}
-        placeholder="feet, people, dollars, etc."
-        placeholderTextColor={Colors.textSecondary}
-        value={preferredUnits}
-        onChangeText={setPreferredUnits}
-        maxLength={30}
       />
 
       <TouchableOpacity
@@ -775,6 +897,11 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginBottom: Spacing.xl,
   },
+  apiErrorText: {
+    fontSize: FontSizes.md,
+    color: '#FFA500',
+    marginBottom: Spacing.xl,
+  },
   questionInput: {
     backgroundColor: Colors.backgroundSecondary,
     borderRadius: BorderRadius.md,
@@ -847,6 +974,37 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     color: Colors.textSecondary,
     marginTop: Spacing.xs,
+  },
+  changeUnitsLink: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xs,
+    marginBottom: Spacing.md,
+  },
+  changeUnitsText: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    textDecorationLine: 'underline',
+  },
+  currentAnswerPreview: {
+    backgroundColor: Colors.backgroundSecondary,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  currentAnswerLabel: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    marginRight: Spacing.sm,
+  },
+  currentAnswerText: {
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.semibold,
+    color: Colors.text,
   },
   confirmText: {
     fontSize: FontSizes.md,
