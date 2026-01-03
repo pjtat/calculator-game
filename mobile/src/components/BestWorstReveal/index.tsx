@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, Text, Animated } from 'react-native';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../../constants/theme';
+import FloatingEmoji from './FloatingEmoji';
+import EmojiPicker from './EmojiPicker';
+import { useReactionSync } from './useReactionSync';
+import { submitReaction } from '../../services/firebase';
+import { FloatingEmoji as FloatingEmojiType } from './types';
 
 type RevealPhase = 'best' | 'worst' | 'snark' | 'complete';
 
@@ -15,6 +20,8 @@ export interface BestWorstRevealProps {
   onComplete: () => void;
   canContinue: boolean;
   nextAskerName?: string;
+  gameCode: string;
+  currentRound: number;
 }
 
 // Calculate accuracy percentage from error percentage
@@ -57,8 +64,12 @@ export default function BestWorstReveal({
   onComplete,
   canContinue,
   nextAskerName,
+  gameCode,
+  currentRound,
 }: BestWorstRevealProps) {
   const [phase, setPhase] = useState<RevealPhase>('best');
+  const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmojiType[]>([]);
+  const lastReactionTime = useRef<{ [emoji: string]: number }>({});
 
   // Animations
   const bestSlideAnim = useRef(new Animated.Value(300)).current; // Start off-screen right
@@ -68,6 +79,51 @@ export default function BestWorstReveal({
   const snarkOpacity = useRef(new Animated.Value(0)).current;
   const snarkScale = useRef(new Animated.Value(0.8)).current;
   const buttonOpacity = useRef(new Animated.Value(0)).current;
+
+  // Emoji reaction handlers
+  const handleEmojiPress = useCallback((emoji: string) => {
+    const now = Date.now();
+    const lastTime = lastReactionTime.current[emoji] || 0;
+
+    // Throttle: max 1 reaction per emoji per 200ms
+    if (now - lastTime < 200) {
+      return;
+    }
+
+    lastReactionTime.current[emoji] = now;
+
+    submitReaction(gameCode, currentRound, currentPlayerId, emoji);
+  }, [gameCode, currentRound, currentPlayerId]);
+
+  const handleEmojiComplete = useCallback((id: string) => {
+    setFloatingEmojis(prev => prev.filter(emoji => emoji.id !== id));
+  }, []);
+
+  const handleReactionReceived = useCallback((reaction: { playerId: string; emoji: string; timestamp: number }) => {
+    const newFloatingEmoji: FloatingEmojiType = {
+      id: `${reaction.playerId}-${reaction.timestamp}`,
+      emoji: reaction.emoji,
+      playerId: reaction.playerId,
+      startX: Math.random() * 200 - 100, // Random offset -100 to +100
+      timestamp: reaction.timestamp,
+    };
+
+    setFloatingEmojis(prev => {
+      // Check if this reaction already exists (prevent duplicates)
+      if (prev.some(emoji => emoji.id === newFloatingEmoji.id)) {
+        return prev;
+      }
+
+      // Limit to 15 floating emojis
+      if (prev.length >= 15) {
+        return [...prev.slice(1), newFloatingEmoji];
+      }
+      return [...prev, newFloatingEmoji];
+    });
+  }, []);
+
+  // Listen for emoji reactions from Firebase
+  useReactionSync(gameCode, currentRound, handleReactionReceived);
 
   // Best guess animation
   useEffect(() => {
@@ -153,6 +209,17 @@ export default function BestWorstReveal({
 
     return () => clearTimeout(timer);
   }, [phase]);
+
+  // Auto-transition after 3.5 seconds when complete and can continue
+  useEffect(() => {
+    if (phase === 'complete' && canContinue) {
+      const timer = setTimeout(() => {
+        onComplete();
+      }, 3500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [phase, canContinue, onComplete]);
 
   // Skip to end
   const handleSkip = useCallback(() => {
@@ -254,6 +321,18 @@ export default function BestWorstReveal({
           )}
         </View>
 
+        {/* Emoji Picker - shown during complete phase */}
+        {phase === 'complete' && (
+          <View pointerEvents="box-none">
+            <EmojiPicker
+              gameCode={gameCode}
+              currentRound={currentRound}
+              onEmojiPress={handleEmojiPress}
+              visible={true}
+            />
+          </View>
+        )}
+
         {/* Continue button */}
         {phase === 'complete' && (
           <Animated.View style={[styles.buttonContainer, { opacity: buttonOpacity }]}>
@@ -268,6 +347,18 @@ export default function BestWorstReveal({
             )}
           </Animated.View>
         )}
+
+        {/* Floating emojis overlay */}
+        <View style={styles.floatingEmojiContainer} pointerEvents="none">
+          {floatingEmojis.map(emoji => (
+            <FloatingEmoji
+              key={emoji.id}
+              emoji={emoji.emoji}
+              startX={emoji.startX}
+              onComplete={() => handleEmojiComplete(emoji.id)}
+            />
+          ))}
+        </View>
       </View>
     </TouchableWithoutFeedback>
   );
@@ -384,5 +475,14 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.md,
     textAlign: 'center',
     fontStyle: 'italic',
+  },
+  floatingEmojiContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100,
+    pointerEvents: 'none',
   },
 });

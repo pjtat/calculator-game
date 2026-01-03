@@ -35,7 +35,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       setTapCount(0);
       Alert.alert(
         'Demo Mode',
-        'Start a demo with mock players?',
+        'Choose your demo experience:',
         [
           {
             text: 'Cancel',
@@ -43,12 +43,22 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
             onPress: () => setTapCount(0),
           },
           {
-            text: 'Start Demo',
+            text: 'Demo as Asker',
             onPress: () => {
-              // Navigate to lobby with demo game
+              // Navigate to lobby with asker demo
               navigation.navigate('Lobby', {
-                gameCode: 'DEMO01',
-                playerId: 'demo-player-1',
+                gameCode: 'DEMOASK',
+                playerId: 'demo-user',
+              });
+            },
+          },
+          {
+            text: 'Demo as Participant',
+            onPress: () => {
+              // Navigate to lobby with participant demo
+              navigation.navigate('Lobby', {
+                gameCode: 'DEMOPAR',
+                playerId: 'demo-user',
               });
             },
           },
@@ -111,7 +121,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         style={styles.versionContainer}
       >
         <Text style={styles.version}>
-          v1.3.3 {tapCount > 0 && `(${tapCount}/3)`}
+          v1.0.0 {tapCount > 0 && `(${tapCount}/3)`}
         </Text>
       </TouchableOpacity>
     </View>

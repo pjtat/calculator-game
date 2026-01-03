@@ -382,6 +382,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
             onCalculationChange={handleCalculationChange}
             onSubmit={handleSubmitGuess}
             onTimerExpire={handleTimerExpire}
+            game={game}
           />
         )}
 
@@ -431,6 +432,8 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
             onComplete={handleViewStandings}
             canContinue={game.nextAsker === playerId}
             nextAskerName={game.players[game.nextAsker]?.nickname}
+            gameCode={gameCode}
+            currentRound={game.currentRound}
           />
         )}
 
@@ -444,7 +447,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
       </ScrollView>
 
       {/* Demo Controls */}
-      <DemoControls gameCode={gameCode} navigation={navigation} />
+      <DemoControls gameCode={gameCode} game={game} />
     </SafeAreaView>
   );
 }
@@ -679,6 +682,7 @@ function GuessingView({
   onCalculationChange,
   onSubmit,
   onTimerExpire,
+  game,
 }: any) {
   const snarkyComments = [
     "That wouldn't be my first guess…",
@@ -693,6 +697,10 @@ function GuessingView({
     snarkyComments[Math.floor(Math.random() * snarkyComments.length)]
   );
 
+  const guesses = game?.guesses?.[`round_${game?.currentRound}`] || {};
+  const totalGuessers = game ? Object.keys(game.players).length - 1 : 0;
+  const submitted = Object.keys(guesses).length;
+
   return (
     <View style={styles.guessingContainer}>
       <Text style={styles.questionText}>{question}</Text>
@@ -705,6 +713,14 @@ function GuessingView({
       <View style={styles.timerContainer}>
         <Timer duration={duration} onExpire={onTimerExpire} />
       </View>
+
+      {hasSubmitted && (
+        <View style={styles.progressContainer}>
+          <Text style={styles.progressText}>
+            {submitted} / {totalGuessers} players submitted
+          </Text>
+        </View>
+      )}
 
       {!hasSubmitted ? (
         <>

@@ -41,12 +41,19 @@ export interface RoundRanking {
   pointsAwarded: number;  // +1, 0, or -1
 }
 
+export interface EmojiReaction {
+  playerId: string;
+  emoji: string;
+  timestamp: number;
+}
+
 export interface RoundResult {
   winner: string;
   loser: string;
   correctAnswer: number;
   rankings: RoundRanking[];
   snarkyRemark?: string | null;
+  reactions?: { [reactionId: string]: EmojiReaction };
 }
 
 export interface Game {

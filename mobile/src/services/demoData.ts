@@ -1,7 +1,12 @@
 import { Game } from '../types/game';
+import { DEMO_ASKER, DEMO_PARTICIPANT, DEMO_USER_ID, BOT_PLAYERS } from './demoEngine';
 
+// Legacy demo mode (keep for existing tests)
 export const DEMO_GAME_CODE = 'DEMO01';
 export const DEMO_PLAYER_ID = 'demo-player-1';
+
+// Export new demo constants
+export { DEMO_ASKER, DEMO_PARTICIPANT, DEMO_USER_ID };
 
 export const getDemoGame = (status: Game['status'] = 'waiting'): Game => {
   const baseGame: Game = {
@@ -627,5 +632,72 @@ export const getDemoGameEnd = (): Game => {
         joinedAt: Date.now(),
       },
     },
+  };
+};
+
+// ==================== NEW DEMO MODES ====================
+
+// Helper to create players for new demo modes (user + 6 bots)
+const createDemoPlayers = (userIsHost: boolean = true) => {
+  const players: Game['players'] = {
+    [DEMO_USER_ID]: {
+      nickname: 'You',
+      score: 0,
+      isHost: userIsHost,
+      joinedAt: Date.now(),
+    },
+  };
+
+  BOT_PLAYERS.forEach(bot => {
+    players[bot.id] = {
+      nickname: bot.nickname,
+      score: 0,
+      isHost: false,
+      joinedAt: Date.now(),
+    };
+  });
+
+  return players;
+};
+
+// Asker Mode: User is the asker, waiting in lobby
+export const getDemoAskerLobby = (): Game => {
+  return {
+    status: 'waiting',
+    currentRound: 0,
+    nextAsker: DEMO_USER_ID,
+    players: createDemoPlayers(true),
+    config: {
+      hostId: DEMO_USER_ID,
+      gameMode: 'rounds',
+      targetRounds: 1,
+      targetScore: 10,
+      timerDuration: 30,
+      createdAt: Date.now(),
+    },
+    guesses: {},
+    roundResults: {},
+    currentQuestion: undefined,
+  };
+};
+
+// Participant Mode: User is a participant, waiting in lobby
+export const getDemoParticipantLobby = (): Game => {
+  return {
+    status: 'waiting',
+    currentRound: 0,
+    nextAsker: BOT_PLAYERS[0].id, // First bot will be the asker
+    players: createDemoPlayers(true),
+    config: {
+      hostId: DEMO_USER_ID,
+      gameMode: 'rounds',
+      targetRounds: 1,
+      targetScore: 10,
+      timerDuration: 30,
+      createdAt: Date.now(),
+    },
+    guesses: {},
+    roundResults: {},
+    currentQuestion: undefined,
   };
 };

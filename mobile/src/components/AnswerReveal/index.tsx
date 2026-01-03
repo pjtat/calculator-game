@@ -136,17 +136,21 @@ export default function AnswerReveal({
   const [slotMachineNumber, setSlotMachineNumber] = useState<number>(correctAnswer);
   const [isSlotMachineSpinning, setIsSlotMachineSpinning] = useState<boolean>(false);
 
+  // Separate actual guesses from non-responders
+  const actualGuessRankings = useMemo(() => rankings.filter(r => r.guess !== null), [rankings]);
+  const nonResponders = useMemo(() => rankings.filter(r => r.guess === null), [rankings]);
+
   // Calculate vertical positions for all values
   const scaleData = useMemo(() => {
-    const guesses = rankings.map(r => r.guess).filter((g): g is number => g !== null);
+    const guesses = actualGuessRankings.map(r => r.guess).filter((g): g is number => g !== null);
     const allValues = [correctAnswer, ...guesses];
 
     const minVal = Math.min(...allValues);
     const maxVal = Math.max(...allValues);
 
-    // Add padding
+    // Add padding (asymmetric: less on bottom, more on top)
     const range = maxVal - minVal || 1;
-    const paddedMin = Math.max(0.1, minVal - range * 0.15);
+    const paddedMin = Math.max(0.1, minVal - range * 0.05);
     const paddedMax = maxVal + range * 0.15;
 
     // Use log scale for large ranges
@@ -167,7 +171,7 @@ export default function AnswerReveal({
     };
 
     const correctDotPosition = getPosition(correctAnswer);
-    const guessDotPositions = rankings.map(r =>
+    const guessDotPositions = actualGuessRankings.map(r =>
       r.guess !== null ? getPosition(r.guess) : SCALE_HEIGHT / 2
     );
 
@@ -179,18 +183,19 @@ export default function AnswerReveal({
       guessDotPositions,
       guessLabelPositions: spacedPositions.guessPositions,
     };
-  }, [correctAnswer, rankings]);
+  }, [correctAnswer, actualGuessRankings]);
 
   // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const scaleLineHeight = useRef(new Animated.Value(0)).current;
   const correctMarkerOpacity = useRef(new Animated.Value(0)).current;
   const correctMarkerScale = useRef(new Animated.Value(0.5)).current;
-  const guessAnims = useRef(rankings.map(() => ({
+  const guessAnims = useRef(actualGuessRankings.map(() => ({
     opacity: new Animated.Value(0),
     scale: new Animated.Value(0.5),
   }))).current;
-  const nameAnims = useRef(rankings.map(() => new Animated.Value(0))).current;
+  const nameAnims = useRef(actualGuessRankings.map(() => new Animated.Value(0))).current;
+  const nonResponderOpacity = useRef(new Animated.Value(0)).current;
   const buttonOpacity = useRef(new Animated.Value(0)).current;
 
   // Calculate zoom translation to center the correct answer when zoomed in
@@ -290,7 +295,9 @@ export default function AnswerReveal({
   useEffect(() => {
     if (phase === 'guesses') {
       // Calculate total duration for all guess reveals (slower pacing)
-      const totalRevealDuration = 1500 + (rankings.length - 1) * 2000;
+      const totalRevealDuration = actualGuessRankings.length > 0
+        ? 1500 + (actualGuessRankings.length - 1) * 2000
+        : 1500;
 
       // Zoom out and center simultaneously
       Animated.parallel([
@@ -306,7 +313,7 @@ export default function AnswerReveal({
         }),
       ]).start();
     }
-  }, [phase, rankings.length]);
+  }, [phase, actualGuessRankings.length]);
 
   // Guesses phase - reveal guesses one by one in best-to-worst order
   useEffect(() => {
@@ -345,7 +352,7 @@ export default function AnswerReveal({
     }
   }, [phase, revealedNameIndex]);
 
-  // Button fade in
+  // Button fade in and non-responders fade in
   useEffect(() => {
     if (phase === 'complete') {
       Animated.timing(buttonOpacity, {
@@ -353,8 +360,17 @@ export default function AnswerReveal({
         duration: 500,
         useNativeDriver: true,
       }).start();
+
+      // Fade in non-responders list if there are any
+      if (nonResponders.length > 0) {
+        Animated.timing(nonResponderOpacity, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }).start();
+      }
     }
-  }, [phase]);
+  }, [phase, nonResponders.length]);
 
   // Phase timing (longer durations for dramatic effect)
   useEffect(() => {
@@ -369,7 +385,10 @@ export default function AnswerReveal({
         timer = setTimeout(() => setPhase('guesses'), 5700);
         break;
       case 'guesses':
-        if (revealedGuessIndex < rankings.length - 1) {
+        if (actualGuessRankings.length === 0) {
+          // No actual guesses - skip to complete phase
+          timer = setTimeout(() => setPhase('complete'), 1500);
+        } else if (revealedGuessIndex < actualGuessRankings.length - 1) {
           timer = setTimeout(() => {
             setRevealedGuessIndex(prev => prev + 1);
           }, revealedGuessIndex === -1 ? 1500 : 2000);
@@ -378,7 +397,10 @@ export default function AnswerReveal({
         }
         break;
       case 'identities':
-        if (revealedNameIndex < rankings.length - 1) {
+        if (actualGuessRankings.length === 0) {
+          // No actual guesses - skip to complete phase
+          timer = setTimeout(() => setPhase('complete'), 500);
+        } else if (revealedNameIndex < actualGuessRankings.length - 1) {
           timer = setTimeout(() => {
             setRevealedNameIndex(prev => prev + 1);
           }, revealedNameIndex === -1 ? 800 : 1500);
@@ -389,14 +411,25 @@ export default function AnswerReveal({
     }
 
     return () => clearTimeout(timer);
-  }, [phase, revealedGuessIndex, revealedNameIndex, rankings.length]);
+  }, [phase, revealedGuessIndex, revealedNameIndex, actualGuessRankings.length]);
+
+  // Auto-transition after 3.5 seconds when complete and can continue
+  useEffect(() => {
+    if (phase === 'complete' && canContinue) {
+      const timer = setTimeout(() => {
+        onComplete();
+      }, 3500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [phase, canContinue, onComplete]);
 
   // Skip to end
   const handleSkip = useCallback(() => {
     if (phase !== 'complete') {
       setPhase('complete');
-      setRevealedGuessIndex(rankings.length - 1);
-      setRevealedNameIndex(rankings.length - 1);
+      setRevealedGuessIndex(actualGuessRankings.length - 1);
+      setRevealedNameIndex(actualGuessRankings.length - 1);
       scaleLineHeight.setValue(SCALE_HEIGHT);
       correctMarkerOpacity.setValue(1);
       correctMarkerScale.setValue(1);
@@ -406,6 +439,7 @@ export default function AnswerReveal({
       });
       nameAnims.forEach(anim => anim.setValue(1));
       buttonOpacity.setValue(1);
+      nonResponderOpacity.setValue(1);
       // Reset zoom animations
       zoomScale.setValue(1);
       zoomTranslateY.setValue(0);
@@ -413,7 +447,7 @@ export default function AnswerReveal({
       setSlotMachineNumber(correctAnswer);
       setIsSlotMachineSpinning(false);
     }
-  }, [phase, rankings.length, correctAnswer]);
+  }, [phase, actualGuessRankings.length, correctAnswer]);
 
   return (
     <TouchableWithoutFeedback onPress={handleSkip}>
@@ -486,8 +520,8 @@ export default function AnswerReveal({
               {units && <Text style={styles.correctAnswerUnits}> {units}</Text>}
             </Animated.View>
 
-            {/* Guess markers - dots on the line */}
-            {rankings.map((ranking, index) => {
+            {/* Guess markers - dots on the line (only actual guesses, not non-responders) */}
+            {actualGuessRankings.map((ranking, index) => {
               const color = getDistanceColor(ranking.guess, correctAnswer);
               const dotY = scaleData.guessDotPositions[index];
 
@@ -508,12 +542,12 @@ export default function AnswerReveal({
               );
             })}
 
-            {/* Guess labels - spaced out with horizontal leader lines */}
-            {rankings.map((ranking, index) => {
+            {/* Guess labels - spaced out with horizontal leader lines (only actual guesses) */}
+            {actualGuessRankings.map((ranking, index) => {
               const player = players[ranking.playerId];
               const color = getDistanceColor(ranking.guess, correctAnswer);
               const isWinner = index === 0;
-              const isLoser = index === rankings.length - 1;
+              const isLoser = index === actualGuessRankings.length - 1 && actualGuessRankings.length > 1;
               const dotY = scaleData.guessDotPositions[index];
               const labelY = scaleData.guessLabelPositions[index];
               const verticalOffset = dotY - labelY;
@@ -569,6 +603,18 @@ export default function AnswerReveal({
             })}
             </Animated.View>
           </View>
+        )}
+
+        {/* Non-responders list */}
+        {phase === 'complete' && nonResponders.length > 0 && (
+          <Animated.View style={[styles.nonRespondersContainer, { opacity: nonResponderOpacity }]}>
+            <Text style={styles.nonRespondersLabel}>No response:</Text>
+            <Text style={styles.nonRespondersNames}>
+              {nonResponders
+                .map(r => players[r.playerId]?.nickname || 'Unknown')
+                .join(', ')}
+            </Text>
+          </Animated.View>
         )}
 
         {/* Continue button */}
@@ -789,6 +835,27 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: FontSizes.md,
     textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  // Non-responders
+  nonRespondersContainer: {
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    backgroundColor: Colors.backgroundSecondary,
+    borderRadius: BorderRadius.md,
+    borderLeftWidth: 3,
+    borderLeftColor: '#666666',
+  },
+  nonRespondersLabel: {
+    color: Colors.textSecondary,
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semibold,
+    marginBottom: Spacing.xs,
+  },
+  nonRespondersNames: {
+    color: Colors.textMuted,
+    fontSize: FontSizes.sm,
     fontStyle: 'italic',
   },
 });

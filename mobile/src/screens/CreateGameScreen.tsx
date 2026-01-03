@@ -26,6 +26,8 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
   const [customScore, setCustomScore] = useState('');
   const [closestScore, setClosestScore] = useState('1');
   const [furthestScore, setFurthestScore] = useState('-1');
+  const [timerOption, setTimerOption] = useState<'30' | '45' | 'custom'>('45');
+  const [customTimer, setCustomTimer] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleCreateGame = async () => {
@@ -68,6 +70,13 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
       return;
     }
 
+    // Validate timer duration
+    const timerValue = timerOption === 'custom' ? parseInt(customTimer) : parseInt(timerOption);
+    if (isNaN(timerValue) || timerValue < 10 || timerValue > 90) {
+      Alert.alert('Invalid Timer', 'Please enter a valid timer duration (10-90 seconds).');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -75,7 +84,7 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
       const playerId = await signInAnonymous();
 
       // Create the game with rounds mode (both values are stored but rounds mode is used)
-      const gameCode = await createGame(playerId, nickname.trim(), 'rounds', roundsValue);
+      const gameCode = await createGame(playerId, nickname.trim(), 'rounds', roundsValue, timerValue);
 
       // Navigate to lobby
       navigation.replace('Lobby', { gameCode, playerId });
@@ -216,6 +225,63 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
             placeholderTextColor={Colors.textSecondary}
             value={customScore}
             onChangeText={setCustomScore}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+        )}
+      </View>
+
+      {/* Timer Duration Selection */}
+      <View style={styles.section}>
+        <Text style={styles.label}>Timer Duration (seconds)</Text>
+        <View style={styles.optionsContainer}>
+          <TouchableOpacity
+            style={[styles.optionButton, timerOption === '30' && styles.optionButtonActive]}
+            onPress={() => setTimerOption('30')}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                timerOption === '30' && styles.optionButtonTextActive,
+              ]}
+            >
+              30
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.optionButton, timerOption === '45' && styles.optionButtonActive]}
+            onPress={() => setTimerOption('45')}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                timerOption === '45' && styles.optionButtonTextActive,
+              ]}
+            >
+              45
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.optionButton, timerOption === 'custom' && styles.optionButtonActive]}
+            onPress={() => setTimerOption('custom')}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                timerOption === 'custom' && styles.optionButtonTextActive,
+              ]}
+            >
+              Custom
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {timerOption === 'custom' && (
+          <TextInput
+            style={[styles.input, styles.customInput]}
+            placeholder="Enter timer (10-90 seconds)"
+            placeholderTextColor={Colors.textSecondary}
+            value={customTimer}
+            onChangeText={setCustomTimer}
             keyboardType="number-pad"
             maxLength={2}
           />

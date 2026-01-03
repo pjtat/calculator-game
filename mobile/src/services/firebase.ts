@@ -5,7 +5,7 @@ import { getReactNativePersistence } from '@firebase/auth/dist/rn/index.js';
 import { getDatabase, ref, set, get, onValue, off, push, update, Database } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import { Game, Player, Guess, CurrentQuestion, RoundResult } from '../types/game';
+import { Game, Player, Guess, CurrentQuestion, RoundResult, EmojiReaction } from '../types/game';
 import { generateSnarkyRemark } from './gemini';
 import {
   DEMO_GAME_CODE,
@@ -18,11 +18,29 @@ import {
   getDemoGameBestWorstReveal,
   getDemoGameStandings,
   getDemoGameEnd,
+  DEMO_ASKER,
+  DEMO_PARTICIPANT,
+  DEMO_USER_ID,
+  getDemoAskerLobby,
+  getDemoParticipantLobby,
 } from './demoData';
+import {
+  BOT_PLAYERS,
+  generateBotGuess,
+  generateBotCalculation,
+  scheduleBotSubmissions,
+  getRandomDemoQuestion,
+} from './demoEngine';
 
-// Demo mode state
+// Legacy demo mode state (keep for existing tests)
 let demoGameState: Game = getDemoGame('waiting');
 let demoGameListeners: Array<(game: Game) => void> = [];
+
+// New demo mode states
+let demoAskerState: Game = getDemoAskerLobby();
+let demoParticipantState: Game = getDemoParticipantLobby();
+let demoAskerListeners: Array<(game: Game) => void> = [];
+let demoParticipantListeners: Array<(game: Game) => void> = [];
 
 // Firebase configuration from app.config.ts extra (populated via environment variables)
 const extra = Constants.expoConfig?.extra;
@@ -97,7 +115,8 @@ export const createGame = async (
   hostId: string,
   hostNickname: string,
   gameMode: 'rounds' | 'score',
-  targetValue: number
+  targetValue: number,
+  timerDuration: number = 45
 ): Promise<string> => {
   try {
     // Generate unique game code
@@ -120,7 +139,7 @@ export const createGame = async (
       config: {
         gameMode,
         ...(gameMode === 'rounds' ? { targetRounds: targetValue } : { targetScore: targetValue }),
-        timerDuration: 30,
+        timerDuration,
         createdAt: Date.now(),
         hostId,
       },
@@ -192,9 +211,46 @@ export const joinGame = async (
 // ==================== Start Game ====================
 
 export const startGame = async (gameCode: string): Promise<void> => {
-  // Demo mode - update demo state
+  // Legacy demo mode
   if (gameCode === DEMO_GAME_CODE) {
     updateDemoGame(getDemoGameQuestionEntry());
+    return;
+  }
+
+  // Asker demo mode - user will ask the question
+  if (gameCode === DEMO_ASKER) {
+    demoAskerState = {
+      ...demoAskerState,
+      status: 'question_entry',
+      currentRound: 1,
+    };
+    updateDemoAsker(demoAskerState);
+    return;
+  }
+
+  // Participant demo mode - bot will ask the question
+  if (gameCode === DEMO_PARTICIPANT) {
+    demoParticipantState = {
+      ...demoParticipantState,
+      status: 'question_entry',
+      currentRound: 1,
+    };
+    updateDemoParticipant(demoParticipantState);
+
+    // After 2 seconds, bot asks a question
+    setTimeout(() => {
+      const question = getRandomDemoQuestion();
+      demoParticipantState = {
+        ...demoParticipantState,
+        status: 'guessing',
+        currentRound: 1,
+        currentQuestion: question,
+        guesses: {
+          round_1: {},
+        },
+      };
+      updateDemoParticipant(demoParticipantState);
+    }, 2000);
     return;
   }
 
@@ -218,15 +274,43 @@ export const submitQuestion = async (
   answer: number,
   units?: string
 ): Promise<void> => {
-  try {
-    const question: CurrentQuestion = {
-      text: questionText,
-      answer,
-      units,
-      askedBy: playerId,
-      submittedAt: Date.now(),
-    };
+  const question: CurrentQuestion = {
+    text: questionText,
+    answer,
+    units,
+    askedBy: playerId,
+    submittedAt: Date.now(),
+  };
 
+  // Asker demo mode - user asked the question, immediately populate all bot guesses
+  if (gameCode === DEMO_ASKER && playerId === DEMO_USER_ID) {
+    const botGuesses: { [key: string]: Guess } = {};
+
+    // Generate all bot guesses immediately
+    BOT_PLAYERS.forEach(bot => {
+      const guess = generateBotGuess(answer, bot);
+      const calculation = generateBotCalculation(guess);
+      botGuesses[bot.id] = {
+        value: guess,
+        calculation,
+        submittedAt: Date.now(),
+      };
+    });
+
+    demoAskerState = {
+      ...demoAskerState,
+      currentQuestion: question,
+      status: 'guessing',
+      currentRound: 1,
+      guesses: {
+        round_1: botGuesses,
+      },
+    };
+    updateDemoAsker(demoAskerState);
+    return;
+  }
+
+  try {
     await update(ref(database, `games/${gameCode}`), {
       currentQuestion: question,
       status: 'guessing',
@@ -246,13 +330,47 @@ export const submitGuess = async (
   value: number | null,
   calculation: string
 ): Promise<void> => {
-  try {
-    const guess: Guess = {
-      value,
-      calculation,
-      submittedAt: value !== null ? Date.now() : null,
+  const guess: Guess = {
+    value,
+    calculation,
+    submittedAt: value !== null ? Date.now() : null,
+  };
+
+  // Participant demo mode - user submitted guess, immediately populate all bot guesses
+  if (gameCode === DEMO_PARTICIPANT && playerId === DEMO_USER_ID) {
+    const correctAnswer = demoParticipantState.currentQuestion?.answer || 0;
+    const askerId = demoParticipantState.currentQuestion?.askedBy || '';
+
+    // Get all bots except the asker
+    const guessingBots = BOT_PLAYERS.filter(bot => bot.id !== askerId);
+
+    // Populate all guesses immediately
+    const allGuesses: { [key: string]: Guess } = {
+      [DEMO_USER_ID]: guess,
     };
 
+    // Generate all bot guesses immediately
+    guessingBots.forEach(bot => {
+      const botGuess = generateBotGuess(correctAnswer, bot);
+      const botCalculation = generateBotCalculation(botGuess);
+      allGuesses[bot.id] = {
+        value: botGuess,
+        calculation: botCalculation,
+        submittedAt: Date.now(),
+      };
+    });
+
+    demoParticipantState = {
+      ...demoParticipantState,
+      guesses: {
+        round_1: allGuesses,
+      },
+    };
+    updateDemoParticipant(demoParticipantState);
+    return;
+  }
+
+  try {
     await set(
       ref(database, `games/${gameCode}/guesses/round_${roundNumber}/${playerId}`),
       guess
@@ -270,9 +388,19 @@ export const calculateAndSubmitResults = async (
   roundNumber: number
 ): Promise<void> => {
   try {
-    const gameRef = ref(database, `games/${gameCode}`);
-    const snapshot = await get(gameRef);
-    const game = snapshot.val() as Game;
+    // Get game state - use demo state for demo modes
+    let game: Game;
+    if (gameCode === DEMO_ASKER) {
+      game = demoAskerState;
+    } else if (gameCode === DEMO_PARTICIPANT) {
+      game = demoParticipantState;
+    } else if (gameCode === DEMO_GAME_CODE) {
+      game = demoGameState;
+    } else {
+      const gameRef = ref(database, `games/${gameCode}`);
+      const snapshot = await get(gameRef);
+      game = snapshot.val() as Game;
+    }
 
     const guesses = game.guesses[`round_${roundNumber}`] || {};
     const correctAnswer = game.currentQuestion?.answer || 0;
@@ -299,19 +427,19 @@ export const calculateAndSubmitResults = async (
       return a.percentageError - b.percentageError;
     });
 
-    // Award points: +1 for closest, -1 for furthest, -1 for null guesses
-    if (rankings.length > 0) {
-      rankings[0].pointsAwarded = 1; // Winner
-      if (rankings.length > 1) {
-        rankings[rankings.length - 1].pointsAwarded = -1; // Loser
-      }
+    // Separate actual guesses from non-responses
+    const actualGuesses = rankings.filter((r) => r.guess !== null);
+    const nonResponses = rankings.filter((r) => r.guess === null);
+
+    // Award points based on whether anyone actually answered
+    if (actualGuesses.length > 0) {
+      // Best guess gets +1, everyone else who answered gets 0 (default)
+      actualGuesses[0].pointsAwarded = 1;
     }
 
-    // Handle null guesses (timeouts) - always -1
-    rankings.forEach((ranking) => {
-      if (ranking.guess === null) {
-        ranking.pointsAwarded = -1;
-      }
+    // All non-responders get -1 penalty
+    nonResponses.forEach((ranking) => {
+      ranking.pointsAwarded = -1;
     });
 
     // Update player scores
@@ -353,13 +481,43 @@ export const calculateAndSubmitResults = async (
       snarkyRemark,
     };
 
-    // Update game state
-    await update(ref(database, `games/${gameCode}`), {
-      ...scoreUpdates,
-      [`roundResults/round_${roundNumber}`]: result,
-      nextAsker: winner,
-      status: 'results',
-    });
+    // Update game state - handle demo modes
+    if (gameCode === DEMO_ASKER || gameCode === DEMO_PARTICIPANT || gameCode === DEMO_GAME_CODE) {
+      // Update in-memory demo state
+      const currentState = gameCode === DEMO_ASKER ? demoAskerState :
+                           gameCode === DEMO_PARTICIPANT ? demoParticipantState :
+                           demoGameState;
+
+      // Update player scores
+      rankings.forEach((ranking) => {
+        if (currentState.players[ranking.playerId]) {
+          currentState.players[ranking.playerId].score += ranking.pointsAwarded;
+        }
+      });
+
+      // Update round results and status
+      currentState.roundResults[`round_${roundNumber}`] = result;
+      // In demo modes, always set user as next asker so auto-transitions work
+      currentState.nextAsker = DEMO_USER_ID;
+      currentState.status = 'results';
+
+      // Notify listeners
+      if (gameCode === DEMO_ASKER) {
+        updateDemoAsker({ ...currentState });
+      } else if (gameCode === DEMO_PARTICIPANT) {
+        updateDemoParticipant({ ...currentState });
+      } else {
+        updateDemoGame({ ...currentState });
+      }
+    } else {
+      // Update Firebase for real games
+      await update(ref(database, `games/${gameCode}`), {
+        ...scoreUpdates,
+        [`roundResults/round_${roundNumber}`]: result,
+        nextAsker: winner,
+        status: 'results',
+      });
+    }
   } catch (error) {
     console.error('Error calculating results:', error);
     throw error;
@@ -370,9 +528,19 @@ export const calculateAndSubmitResults = async (
 
 export const checkWinCondition = async (gameCode: string): Promise<boolean> => {
   try {
-    const gameRef = ref(database, `games/${gameCode}`);
-    const snapshot = await get(gameRef);
-    const game = snapshot.val() as Game;
+    // Get game state - use demo state for demo modes
+    let game: Game;
+    if (gameCode === DEMO_ASKER) {
+      game = demoAskerState;
+    } else if (gameCode === DEMO_PARTICIPANT) {
+      game = demoParticipantState;
+    } else if (gameCode === DEMO_GAME_CODE) {
+      game = demoGameState;
+    } else {
+      const gameRef = ref(database, `games/${gameCode}`);
+      const snapshot = await get(gameRef);
+      game = snapshot.val() as Game;
+    }
 
     if (game.config.gameMode === 'rounds') {
       return game.currentRound >= (game.config.targetRounds || 10);
@@ -388,10 +556,53 @@ export const checkWinCondition = async (gameCode: string): Promise<boolean> => {
   }
 };
 
+// ==================== Move to Best/Worst Reveal ====================
+
+export const moveToBestWorst = async (gameCode: string): Promise<void> => {
+  try {
+    // Handle demo modes
+    if (gameCode === DEMO_ASKER) {
+      demoAskerState.status = 'best_worst_reveal';
+      updateDemoAsker({ ...demoAskerState });
+      return;
+    } else if (gameCode === DEMO_PARTICIPANT) {
+      demoParticipantState.status = 'best_worst_reveal';
+      updateDemoParticipant({ ...demoParticipantState });
+      return;
+    } else if (gameCode === DEMO_GAME_CODE) {
+      demoGameState.status = 'best_worst_reveal';
+      updateDemoGame({ ...demoGameState });
+      return;
+    }
+
+    await update(ref(database, `games/${gameCode}`), {
+      status: 'best_worst_reveal',
+    });
+  } catch (error) {
+    console.error('Error moving to best/worst:', error);
+    throw error;
+  }
+};
+
 // ==================== Move to Standings ====================
 
 export const moveToStandings = async (gameCode: string): Promise<void> => {
   try {
+    // Handle demo modes
+    if (gameCode === DEMO_ASKER) {
+      demoAskerState.status = 'standings';
+      updateDemoAsker({ ...demoAskerState });
+      return;
+    } else if (gameCode === DEMO_PARTICIPANT) {
+      demoParticipantState.status = 'standings';
+      updateDemoParticipant({ ...demoParticipantState });
+      return;
+    } else if (gameCode === DEMO_GAME_CODE) {
+      demoGameState.status = 'standings';
+      updateDemoGame({ ...demoGameState });
+      return;
+    }
+
     await update(ref(database, `games/${gameCode}`), {
       status: 'standings',
     });
@@ -405,6 +616,29 @@ export const moveToStandings = async (gameCode: string): Promise<void> => {
 
 export const advanceToNextRound = async (gameCode: string): Promise<void> => {
   try {
+    // Handle demo modes - always end after 1 round
+    if (gameCode === DEMO_ASKER) {
+      demoAskerState.status = 'ended';
+      updateDemoAsker({ ...demoAskerState });
+      return;
+    } else if (gameCode === DEMO_PARTICIPANT) {
+      demoParticipantState.status = 'ended';
+      updateDemoParticipant({ ...demoParticipantState });
+      return;
+    } else if (gameCode === DEMO_GAME_CODE) {
+      const isGameOver = await checkWinCondition(gameCode);
+      if (isGameOver) {
+        demoGameState.status = 'ended';
+        updateDemoGame({ ...demoGameState });
+      } else {
+        demoGameState.status = 'question_entry';
+        demoGameState.currentRound = demoGameState.currentRound + 1;
+        demoGameState.currentQuestion = undefined;
+        updateDemoGame({ ...demoGameState });
+      }
+      return;
+    }
+
     const gameRef = ref(database, `games/${gameCode}`);
     const snapshot = await get(gameRef);
     const game = snapshot.val() as Game;
@@ -434,17 +668,30 @@ export const listenToGame = (
   gameCode: string,
   callback: (game: Game | null) => void
 ): (() => void) => {
-  // Demo mode - return mock data
+  // Legacy demo mode - return mock data
   if (gameCode === DEMO_GAME_CODE) {
-    // Add listener
     demoGameListeners.push(callback);
-
-    // Immediately call callback with current demo game state
     callback(demoGameState);
-
-    // Return cleanup function that removes listener
     return () => {
       demoGameListeners = demoGameListeners.filter(cb => cb !== callback);
+    };
+  }
+
+  // Asker demo mode
+  if (gameCode === DEMO_ASKER) {
+    demoAskerListeners.push(callback);
+    callback(demoAskerState);
+    return () => {
+      demoAskerListeners = demoAskerListeners.filter(cb => cb !== callback);
+    };
+  }
+
+  // Participant demo mode
+  if (gameCode === DEMO_PARTICIPANT) {
+    demoParticipantListeners.push(callback);
+    callback(demoParticipantState);
+    return () => {
+      demoParticipantListeners = demoParticipantListeners.filter(cb => cb !== callback);
     };
   }
 
@@ -466,6 +713,17 @@ export const listenToGame = (
 const updateDemoGame = (newState: Game) => {
   demoGameState = newState;
   demoGameListeners.forEach(listener => listener(demoGameState));
+};
+
+// Helpers for new demo modes
+const updateDemoAsker = (newState: Game) => {
+  demoAskerState = newState;
+  demoAskerListeners.forEach(listener => listener(demoAskerState));
+};
+
+const updateDemoParticipant = (newState: Game) => {
+  demoParticipantState = newState;
+  demoParticipantListeners.forEach(listener => listener(demoParticipantState));
 };
 
 // Export function to advance demo mode (for debugging/navigation)
@@ -551,6 +809,30 @@ export const setDemoScreen = (screen: DemoScreen) => {
       break;
     default:
       updateDemoGame(getDemoGame('waiting'));
+  }
+};
+
+// ==================== Emoji Reactions ====================
+
+export const submitReaction = async (
+  gameCode: string,
+  roundNumber: number,
+  playerId: string,
+  emoji: string
+): Promise<void> => {
+  try {
+    const reactionsRef = ref(database, `games/${gameCode}/roundResults/round_${roundNumber}/reactions`);
+
+    const reaction: EmojiReaction = {
+      playerId,
+      emoji,
+      timestamp: Date.now(),
+    };
+
+    await push(reactionsRef, reaction);
+  } catch (error) {
+    console.error('Error submitting reaction:', error);
+    // Fail silently - reactions are non-critical
   }
 };
 

@@ -153,6 +153,17 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
     }
   };
 
+  const handleRound = () => {
+    if (disabled) return;
+    mediumTap();
+
+    const cleanValue = displayValue.replace(/,/g, '');
+    const numValue = parseFloat(cleanValue);
+    if (!isNaN(numValue)) {
+      setDisplayValue(Math.round(numValue).toString());
+    }
+  };
+
   const calculate = (prev: number, current: number, op: string): number => {
     switch (op) {
       case '+':
@@ -190,11 +201,12 @@ export default function Calculator({ onCalculationChange, disabled = false }: Ca
 
       {/* Calculator Buttons */}
       <View style={styles.buttonsContainer}>
-        {/* Row 1: ←, Clear, ÷ */}
+        {/* Row 1: ←, Clear, Round, ÷ */}
         <View style={styles.row}>
-          <Button value="←" onPress={handleBackspace} style={[styles.clearButton, styles.wideButton]} textStyle={styles.clearButtonText} />
-          <Button value="Clear" onPress={handleClear} style={[styles.clearButton, styles.wideButton]} textStyle={styles.clearButtonText} />
-          <Button value="÷" onPress={() => handleOperationPress('/')} style={[styles.operationButton, styles.divideButton]} textStyle={styles.operationButtonText} />
+          <Button value="←" onPress={handleBackspace} style={styles.clearButton} textStyle={styles.clearButtonText} />
+          <Button value="Clear" onPress={handleClear} style={styles.clearButton} textStyle={styles.clearButtonText} />
+          <Button value="Round" onPress={handleRound} style={styles.clearButton} textStyle={styles.clearButtonText} />
+          <Button value="÷" onPress={() => handleOperationPress('/')} style={styles.operationButton} textStyle={styles.operationButtonText} />
         </View>
 
         {/* Row 2: 7, 8, 9, × */}
@@ -301,9 +313,6 @@ const styles = StyleSheet.create({
   },
   operationButtonText: {
     color: Colors.primary,
-  },
-  divideButton: {
-    flex: 0.9,
   },
   equalsButton: {
     backgroundColor: Colors.primary,

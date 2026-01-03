@@ -1,100 +1,81 @@
-import React, { useState } from 'react';
-import {
-  TouchableOpacity,
-  Text,
-  StyleSheet,
-  Modal,
-  View,
-  FlatList,
-  Pressable,
-} from 'react-native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { setDemoScreen, DEMO_SCREENS, DemoScreen } from '../services/firebase';
-import { Colors, Spacing, BorderRadius, FontSizes } from '../constants/theme';
-import { DEMO_GAME_CODE } from '../services/demoData';
-import { RootStackParamList } from '../navigation/AppNavigator';
+import React from 'react';
+import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { moveToStandings, advanceToNextRound, calculateAndSubmitResults, moveToBestWorst } from '../services/firebase';
+import { Colors, Spacing, BorderRadius } from '../constants/theme';
+import { DEMO_GAME_CODE, DEMO_ASKER, DEMO_PARTICIPANT } from '../services/demoData';
+import { Game } from '../types/game';
 
 interface DemoControlsProps {
   gameCode: string;
-  navigation?: NativeStackNavigationProp<RootStackParamList, any>;
+  game: Game | null;
 }
 
-export default function DemoControls({ gameCode, navigation }: DemoControlsProps) {
-  const [modalVisible, setModalVisible] = useState(false);
-
-  // Only show in demo mode
-  if (gameCode !== DEMO_GAME_CODE) {
+export default function DemoControls({ gameCode, game }: DemoControlsProps) {
+  // Only show in demo modes
+  const isDemoMode = gameCode === DEMO_GAME_CODE || gameCode === DEMO_ASKER || gameCode === DEMO_PARTICIPANT;
+  if (!isDemoMode || !game) {
     return null;
   }
 
-  const handleSelectScreen = (screen: DemoScreen, isNavigation?: boolean) => {
-    setModalVisible(false);
+  // Determine demo mode label
+  let demoModeLabel = 'Demo';
+  if (gameCode === DEMO_ASKER) {
+    demoModeLabel = 'Asker Demo';
+  } else if (gameCode === DEMO_PARTICIPANT) {
+    demoModeLabel = 'Participant Demo';
+  } else if (gameCode === DEMO_GAME_CODE) {
+    demoModeLabel = 'Legacy Demo';
+  }
 
-    if (isNavigation && navigation) {
-      // Navigate to a different screen
-      if (screen === 'create_game') {
-        navigation.navigate('CreateGame');
-      } else if (screen === 'join_game') {
-        navigation.navigate('JoinGame');
-      } else if (screen === 'lobby') {
-        setDemoScreen('lobby');
-        navigation.navigate('Lobby', {
-          gameCode: DEMO_GAME_CODE,
-          playerId: 'demo-player-1',
-        });
+  const handleNextScreen = async () => {
+    try {
+      // Determine next screen based on current status
+      switch (game.status) {
+        case 'guessing':
+          // Force calculate results to advance from guessing
+          console.log('Force advancing from guessing to results');
+          await calculateAndSubmitResults(gameCode, game.currentRound);
+          break;
+        case 'results':
+          // Results → Best/Worst Reveal
+          await moveToBestWorst(gameCode);
+          break;
+        case 'best_worst_reveal':
+          // Best/Worst → Standings
+          await moveToStandings(gameCode);
+          break;
+        case 'standings':
+          // Standings → End
+          await advanceToNextRound(gameCode);
+          break;
+        default:
+          console.log('Next button clicked but no action for status:', game.status);
+          break;
       }
-    } else {
-      // Update demo game state
-      setDemoScreen(screen);
+    } catch (error) {
+      console.error('Error advancing demo:', error);
     }
   };
 
-  return (
-    <>
-      <TouchableOpacity
-        style={styles.button}
-        onPress={() => setModalVisible(true)}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.buttonText}>Demo Screens ▼</Text>
-      </TouchableOpacity>
+  // Show button on all screens during active gameplay (not waiting/ended)
+  const shouldShowButton =
+    game.status !== 'waiting' &&
+    game.status !== 'ended' &&
+    game.status !== 'question_entry';
 
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setModalVisible(false)}
-        >
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Demo Screen</Text>
-            <FlatList
-              data={DEMO_SCREENS}
-              keyExtractor={(item) => item.key}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.optionItem}
-                  onPress={() => handleSelectScreen(item.key, item.isNavigation)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.optionText}>{item.label}</Text>
-                </TouchableOpacity>
-              )}
-              ItemSeparatorComponent={() => <View style={styles.separator} />}
-            />
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setModalVisible(false)}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
-    </>
+  if (!shouldShowButton) {
+    return null;
+  }
+
+  return (
+    <TouchableOpacity
+      style={styles.button}
+      onPress={handleNextScreen}
+      activeOpacity={0.8}
+    >
+      <Text style={styles.buttonLabel}>{demoModeLabel}</Text>
+      <Text style={styles.buttonText}>Next Screen →</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -113,56 +94,16 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
+  buttonLabel: {
+    color: Colors.primaryForeground,
+    fontSize: 10,
+    fontWeight: '500',
+    opacity: 0.8,
+    marginBottom: 2,
+  },
   buttonText: {
     color: Colors.primaryForeground,
     fontSize: 14,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.lg,
-  },
-  modalContent: {
-    backgroundColor: Colors.backgroundSecondary,
-    borderRadius: BorderRadius.lg,
-    width: '100%',
-    maxWidth: 320,
-    maxHeight: '70%',
-    overflow: 'hidden',
-  },
-  modalTitle: {
-    fontSize: FontSizes.lg,
-    fontWeight: '700',
-    color: Colors.text,
-    padding: Spacing.lg,
-    textAlign: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  optionItem: {
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-  },
-  optionText: {
-    fontSize: FontSizes.md,
-    color: Colors.text,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: Colors.border,
-  },
-  cancelButton: {
-    padding: Spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    alignItems: 'center',
-  },
-  cancelText: {
-    fontSize: FontSizes.md,
-    color: Colors.primary,
     fontWeight: '600',
   },
 });

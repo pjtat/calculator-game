@@ -170,7 +170,7 @@ export default function LobbyScreen({ navigation, route }: LobbyScreenProps) {
       )}
 
       {/* Demo Controls */}
-      <DemoControls gameCode={gameCode} navigation={navigation} />
+      <DemoControls gameCode={gameCode} game={game} />
     </View>
   );
 }
