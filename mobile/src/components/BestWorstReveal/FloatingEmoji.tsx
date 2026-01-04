@@ -14,18 +14,18 @@ export default function FloatingEmoji({ emoji, startX, onComplete }: FloatingEmo
   const opacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Animate upward 300px over 2 seconds
+    // Animate upward 500px over 2.5 seconds
     Animated.timing(translateY, {
-      toValue: -300,
-      duration: 2000,
+      toValue: -500,
+      duration: 2500,
       easing: Easing.out(Easing.ease),
       useNativeDriver: true,
     }).start();
 
-    // Fade out over 2 seconds, call onComplete when finished
+    // Fade out over 2.5 seconds, call onComplete when finished
     Animated.timing(opacity, {
       toValue: 0,
-      duration: 2000,
+      duration: 2500,
       easing: Easing.linear,
       useNativeDriver: true,
     }).start(({ finished }) => {

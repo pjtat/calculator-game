@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, Text, Animated } from 'react-native';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../../constants/theme';
+import { FeatureFlags } from '../../constants/featureFlags';
 import FloatingEmoji from './FloatingEmoji';
 import EmojiPicker from './EmojiPicker';
 import { useReactionSync } from './useReactionSync';
@@ -214,9 +215,9 @@ export default function BestWorstReveal({
     return () => clearTimeout(timer);
   }, [phase]);
 
-  // Auto-transition with progress bar when complete and can continue
+  // Auto-transition with progress bar when complete and can continue (if enabled)
   useEffect(() => {
-    if (phase === 'complete' && canContinue) {
+    if (FeatureFlags.ENABLE_AUTO_PROGRESSION && phase === 'complete' && canContinue) {
       // Reset and start progress bar animation
       progressAnim.setValue(0);
       const progressAnimation = Animated.timing(progressAnim, {
@@ -357,21 +358,25 @@ export default function BestWorstReveal({
                 <TouchableOpacity style={styles.button} onPress={onComplete}>
                   <Text style={styles.buttonText}>Continue</Text>
                 </TouchableOpacity>
-                {/* Progress bar showing auto-progression countdown */}
-                <View style={styles.progressBarContainer}>
-                  <Animated.View
-                    style={[
-                      styles.progressBar,
-                      {
-                        width: progressAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: ['0%', '100%'],
-                        }),
-                      },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.autoProgressText}>Auto-continuing...</Text>
+                {/* Progress bar showing auto-progression countdown (only when enabled) */}
+                {FeatureFlags.ENABLE_AUTO_PROGRESSION && (
+                  <>
+                    <View style={styles.progressBarContainer}>
+                      <Animated.View
+                        style={[
+                          styles.progressBar,
+                          {
+                            width: progressAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: ['0%', '100%'],
+                            }),
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.autoProgressText}>Auto-continuing...</Text>
+                  </>
+                )}
               </>
             ) : (
               <Text style={styles.waitingText}>

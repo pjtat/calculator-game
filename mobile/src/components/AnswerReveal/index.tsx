@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { View, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, Text, Animated, Dimensions } from 'react-native';
 import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../../constants/theme';
+import { FeatureFlags } from '../../constants/featureFlags';
 import type { RoundRanking, Player } from '../../types/game';
 import { selection, mediumTap, success } from '../../utils/haptics';
 
@@ -413,9 +414,9 @@ export default function AnswerReveal({
     return () => clearTimeout(timer);
   }, [phase, revealedGuessIndex, revealedNameIndex, actualGuessRankings.length]);
 
-  // Auto-transition after 3.5 seconds when complete and can continue
+  // Auto-transition after 3.5 seconds when complete and can continue (if enabled)
   useEffect(() => {
-    if (phase === 'complete' && canContinue) {
+    if (FeatureFlags.ENABLE_AUTO_PROGRESSION && phase === 'complete' && canContinue) {
       const timer = setTimeout(() => {
         onComplete();
       }, 3500);
