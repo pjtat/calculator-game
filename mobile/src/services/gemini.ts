@@ -249,28 +249,59 @@ export const generateSnarkyRemark = async (
   }
 
   try {
-    const prompt = `You are a hilariously snarky game show host reacting to an absurdly bad guess with playful sass.
+    // Detect if this is a year/date question
+    const isYearQuestion = /\b(year|when|what date)\b/i.test(questionText) &&
+                           correctAnswer > 1000 && correctAnswer < 2100;
+
+    const errorPercent = Math.abs((worstGuess - correctAnswer) / correctAnswer) * 100;
+    const yearDiff = Math.abs(worstGuess - correctAnswer);
+
+    // Build error description based on question type
+    let errorDescription: string;
+    let snarkGuidelines: string;
+
+    if (isYearQuestion) {
+      errorDescription = `Error: ${yearDiff} years off`;
+      snarkGuidelines = `IMPORTANT - Scale your reaction based on how many years off the guess is:
+- If off by <10 years: Be gentle and encouraging. "Pretty close!" or "Almost had it!"
+- If off by 10-30 years: Mild teasing, light-hearted. "Not quite, but decent try!"
+- If off by 30-75 years: Moderate snark, point out the gap playfully
+- If off by >75 years: Full snark mode! Be hilariously sassy about how far off it was`;
+    } else {
+      errorDescription = `Error: ${errorPercent.toFixed(0)}% off`;
+      snarkGuidelines = `IMPORTANT - Scale your reaction based on how bad the guess is:
+- If error is <20%: Be gentle and encouraging, barely snarky at all. "Pretty close!" or "Almost had it!"
+- If error is 20-50%: Mild teasing, light-hearted. "Not quite, but decent try!"
+- If error is 50-100%: Moderate snark, point out the gap playfully
+- If error is >100%: Full snark mode! Be hilariously sassy about how far off it was`;
+    }
+
+    const prompt = `You are a witty game show host commenting on a guess.
 
 Question: "${questionText}"
 Correct Answer: ${correctAnswer} ${units || ''}
 Worst Guess: ${worstGuess} ${units || ''}
+${errorDescription}
 
-Generate a witty, sassy remark that contextualizes how ridiculously far off the worst guess was. Use comparisons to well-known facts or familiar quantities, and add expressive interjections and emojis for extra flair.
+${snarkGuidelines}
 
 Rules:
-- Keep it playfully snarky and fun, not mean or hurtful
+- Make comparisons directly relevant to the question's subject matter
+- For historical dates: reference what actually happened in the guessed year, or compare to well-known events
+- For quantities: relate to real facts about the subject being asked about
+- Keep it playful, never mean or hurtful
 - One sentence only (max 120 characters)
-- Start with an interjection like "Yikes...", "Oof...", "Wow...", "Sheesh..."
-- Include 1-2 relevant emojis (use actual emoji characters like 😬, 👀, 💀, 🤯, 😳)
-- Use specific comparisons when possible
+- Be creative and varied with how you start - don't always use the same interjections
+- Include 1-2 relevant emojis
 - Don't mention the player's name
-- Focus on the magnitude of the error with sass
 
-Examples:
-- "Yikes... that's almost the entire population of the United States! 😬"
-- "Oof... that's enough to circle the Earth 3 times! 🌍💀"
-- "Wow... you could buy a small island with that much! 🏝️👀"
-- "Sheesh... that's more people than live in all of Canada! 🤯"
+Examples (notice the variety in tone and style):
+- "Almost! The war was still going in 1780 ⚔️"
+- "So you think the Magna Carta is as old as the United States? 🇺🇸"
+- "That would put Everest in outer space! 🚀"
+- "Neil Armstrong wasn't even born yet! 👶🚀"
+- "Pretty close! Just a few bones short 🦴"
+- "Off by 500 years... just a few centuries! 📜💀"
 
 Respond in JSON format:
 {
