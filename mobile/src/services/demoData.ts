@@ -215,19 +215,19 @@ export const getDemoGameResults = (): Game => {
             playerId: 'demo-player-3', // Bob - closest
             guess: 37000000,
             percentageError: 1.1,
-            pointsAwarded: 3,
+            pointsAwarded: 1,
           },
           {
             playerId: DEMO_PLAYER_ID, // You
             guess: 35000000,
             percentageError: 6.4,
-            pointsAwarded: 2,
+            pointsAwarded: 0,
           },
           {
             playerId: 'demo-player-4', // Charlie
             guess: 40000000,
             percentageError: 7.0,
-            pointsAwarded: 1,
+            pointsAwarded: 0,
           },
           {
             playerId: 'demo-player-5', // Diana
@@ -245,13 +245,13 @@ export const getDemoGameResults = (): Game => {
             playerId: 'demo-player-7', // Fiona
             guess: 20000000,
             percentageError: 46.5,
-            pointsAwarded: -1,
+            pointsAwarded: 0,
           },
           {
             playerId: 'demo-player-8', // George - way off!
             guess: 100000000,
             percentageError: 167.4,
-            pointsAwarded: -2,
+            pointsAwarded: -1,
           },
         ],
         winner: 'demo-player-3',
@@ -261,7 +261,7 @@ export const getDemoGameResults = (): Game => {
     players: {
       [DEMO_PLAYER_ID]: {
         nickname: 'You (Demo)',
-        score: 2,
+        score: 0,
         isHost: true,
         joinedAt: Date.now(),
       },
@@ -273,13 +273,13 @@ export const getDemoGameResults = (): Game => {
       },
       'demo-player-3': {
         nickname: 'Bob',
-        score: 3,
+        score: 1,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-4': {
         nickname: 'Charlie',
-        score: 1,
+        score: 0,
         isHost: false,
         joinedAt: Date.now(),
       },
@@ -297,13 +297,13 @@ export const getDemoGameResults = (): Game => {
       },
       'demo-player-7': {
         nickname: 'Fiona',
-        score: -1,
+        score: 0,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-8': {
         nickname: 'George',
-        score: -2,
+        score: -1,
         isHost: false,
         joinedAt: Date.now(),
       },
@@ -482,19 +482,19 @@ export const getDemoGameStandings = (): Game => {
             playerId: 'demo-player-3',
             guess: 37000000,
             percentageError: 1.1,
-            pointsAwarded: 3,
+            pointsAwarded: 1,
           },
           {
             playerId: DEMO_PLAYER_ID,
             guess: 35000000,
             percentageError: 6.4,
-            pointsAwarded: 2,
+            pointsAwarded: 0,
           },
           {
             playerId: 'demo-player-4',
             guess: 40000000,
             percentageError: 7.0,
-            pointsAwarded: 1,
+            pointsAwarded: 0,
           },
           {
             playerId: 'demo-player-5',
@@ -512,13 +512,13 @@ export const getDemoGameStandings = (): Game => {
             playerId: 'demo-player-7',
             guess: 20000000,
             percentageError: 46.5,
-            pointsAwarded: -1,
+            pointsAwarded: 0,
           },
           {
             playerId: 'demo-player-8',
             guess: 100000000,
             percentageError: 167.4,
-            pointsAwarded: -2,
+            pointsAwarded: -1,
           },
         ],
         winner: 'demo-player-3',
@@ -585,49 +585,49 @@ export const getDemoGameEnd = (): Game => {
     players: {
       [DEMO_PLAYER_ID]: {
         nickname: 'You (Demo)',
-        score: 15,
+        score: 3,
         isHost: true,
         joinedAt: Date.now(),
       },
       'demo-player-2': {
         nickname: 'Alice',
-        score: 12,
+        score: 2,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-3': {
         nickname: 'Bob',
-        score: 18,
+        score: 4,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-4': {
         nickname: 'Charlie',
-        score: 10,
+        score: 1,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-5': {
         nickname: 'Diana',
-        score: 6,
+        score: 0,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-6': {
         nickname: 'Ethan',
-        score: 3,
+        score: 0,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-7': {
         nickname: 'Fiona',
-        score: -4,
+        score: -2,
         isHost: false,
         joinedAt: Date.now(),
       },
       'demo-player-8': {
         nickname: 'George',
-        score: -8,
+        score: -4,
         isHost: false,
         joinedAt: Date.now(),
       },

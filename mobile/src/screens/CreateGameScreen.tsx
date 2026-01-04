@@ -13,6 +13,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '../constants/theme';
 import { createGame, signInAnonymous } from '../services/firebase';
+import { FeatureFlags } from '../constants/featureFlags';
+import { sanitizeUserInput } from '../utils/sanitize';
 
 type CreateGameScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'CreateGame'>;
@@ -31,16 +33,13 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
   const [isLoading, setIsLoading] = useState(false);
 
   const handleCreateGame = async () => {
-    // Validation
-    if (nickname.trim().length < 2) {
-      Alert.alert('Invalid Nickname', 'Nickname must be at least 2 characters long.');
+    // Sanitize and validate nickname
+    const nicknameResult = sanitizeUserInput(nickname, 'nickname');
+    if (!nicknameResult.isValid) {
+      Alert.alert('Invalid Nickname', nicknameResult.error || 'Please enter a valid nickname.');
       return;
     }
-
-    if (nickname.trim().length > 15) {
-      Alert.alert('Invalid Nickname', 'Nickname must be 15 characters or less.');
-      return;
-    }
+    const sanitizedNickname = nicknameResult.sanitized;
 
     // Get rounds value
     const roundsValue = roundsOption === 'custom' ? parseInt(customRounds) : parseInt(roundsOption);
@@ -56,18 +55,20 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
       return;
     }
 
-    // Validate closest score
-    const closestScoreValue = parseInt(closestScore);
-    if (isNaN(closestScoreValue) || closestScoreValue < -99 || closestScoreValue > 99) {
-      Alert.alert('Invalid Closest Score', 'Please enter a valid closest score (-99 to 99).');
-      return;
-    }
+    // Validate closest score (only if feature is enabled)
+    if (FeatureFlags.ENABLE_CUSTOM_SCORING) {
+      const closestScoreValue = parseInt(closestScore);
+      if (isNaN(closestScoreValue) || closestScoreValue < -99 || closestScoreValue > 99) {
+        Alert.alert('Invalid Closest Score', 'Please enter a valid closest score (-99 to 99).');
+        return;
+      }
 
-    // Validate furthest score
-    const furthestScoreValue = parseInt(furthestScore);
-    if (isNaN(furthestScoreValue) || furthestScoreValue < -99 || furthestScoreValue > 99) {
-      Alert.alert('Invalid Furthest Score', 'Please enter a valid furthest score (-99 to 99).');
-      return;
+      // Validate furthest score
+      const furthestScoreValue = parseInt(furthestScore);
+      if (isNaN(furthestScoreValue) || furthestScoreValue < -99 || furthestScoreValue > 99) {
+        Alert.alert('Invalid Furthest Score', 'Please enter a valid furthest score (-99 to 99).');
+        return;
+      }
     }
 
     // Validate timer duration
@@ -84,7 +85,7 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
       const playerId = await signInAnonymous();
 
       // Create the game with rounds mode (both values are stored but rounds mode is used)
-      const gameCode = await createGame(playerId, nickname.trim(), 'rounds', roundsValue, timerValue);
+      const gameCode = await createGame(playerId, sanitizedNickname, 'rounds', roundsValue, timerValue);
 
       // Navigate to lobby
       navigation.replace('Lobby', { gameCode, playerId });
@@ -288,38 +289,40 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
         )}
       </View>
 
-      {/* Scoring Configuration */}
-      <View style={styles.section}>
-        <View style={styles.scoringRow}>
-          <View style={styles.scoringItem}>
-            <Text style={styles.label}>Closest Score</Text>
-            <TextInput
-              style={[styles.input, styles.smallInput]}
-              placeholder="1"
-              placeholderTextColor={Colors.textSecondary}
-              value={closestScore}
-              onChangeText={setClosestScore}
-              keyboardType="numeric"
-              maxLength={3}
-              textAlign="center"
-            />
-          </View>
+      {/* Scoring Configuration - Hidden behind feature flag */}
+      {FeatureFlags.ENABLE_CUSTOM_SCORING && (
+        <View style={styles.section}>
+          <View style={styles.scoringRow}>
+            <View style={styles.scoringItem}>
+              <Text style={styles.label}>Closest Score</Text>
+              <TextInput
+                style={[styles.input, styles.smallInput]}
+                placeholder="1"
+                placeholderTextColor={Colors.textSecondary}
+                value={closestScore}
+                onChangeText={setClosestScore}
+                keyboardType="numeric"
+                maxLength={3}
+                textAlign="center"
+              />
+            </View>
 
-          <View style={styles.scoringItem}>
-            <Text style={styles.label}>Furthest Score</Text>
-            <TextInput
-              style={[styles.input, styles.smallInput]}
-              placeholder="-1"
-              placeholderTextColor={Colors.textSecondary}
-              value={furthestScore}
-              onChangeText={setFurthestScore}
-              keyboardType="numeric"
-              maxLength={3}
-              textAlign="center"
-            />
+            <View style={styles.scoringItem}>
+              <Text style={styles.label}>Furthest Score</Text>
+              <TextInput
+                style={[styles.input, styles.smallInput]}
+                placeholder="-1"
+                placeholderTextColor={Colors.textSecondary}
+                value={furthestScore}
+                onChangeText={setFurthestScore}
+                keyboardType="numeric"
+                maxLength={3}
+                textAlign="center"
+              />
+            </View>
           </View>
         </View>
-      </View>
+      )}
 
       {/* Create Button */}
       <TouchableOpacity

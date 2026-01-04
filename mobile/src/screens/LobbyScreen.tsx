@@ -52,8 +52,8 @@ export default function LobbyScreen({ navigation, route }: LobbyScreenProps) {
 
     const playerCount = Object.keys(game.players).length;
 
-    if (playerCount < 2) {
-      Alert.alert('Not Enough Players', 'You need at least 2 players to start the game.');
+    if (playerCount < 3) {
+      Alert.alert('Not Enough Players', 'You need at least 3 players to start the game.');
       return;
     }
 
@@ -126,7 +126,7 @@ export default function LobbyScreen({ navigation, route }: LobbyScreenProps) {
       {/* Players List */}
       <View style={styles.playersContainer}>
         <Text style={styles.playersHeader}>
-          Players {playerCount < 2 && '(Need at least 2)'}
+          Players {playerCount < 3 && '(Need at least 3)'}
         </Text>
         <ScrollView style={styles.playersList} contentContainerStyle={styles.playersListContent}>
           {players.map((player, index) => (
@@ -151,9 +151,9 @@ export default function LobbyScreen({ navigation, route }: LobbyScreenProps) {
       {/* Start Button or Waiting */}
       {isHost ? (
         <TouchableOpacity
-          style={[styles.startButton, (isStarting || playerCount < 2) && styles.startButtonDisabled]}
+          style={[styles.startButton, (isStarting || playerCount < 3) && styles.startButtonDisabled]}
           onPress={handleStartGame}
-          disabled={isStarting || playerCount < 2}
+          disabled={isStarting || playerCount < 3}
           activeOpacity={0.9}
         >
           {isStarting ? (

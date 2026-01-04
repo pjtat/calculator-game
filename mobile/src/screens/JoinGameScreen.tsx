@@ -13,6 +13,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '../constants/theme';
 import { joinGame, signInAnonymous } from '../services/firebase';
+import { sanitizeUserInput } from '../utils/sanitize';
 
 type JoinGameScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'JoinGame'>;
@@ -30,15 +31,13 @@ export default function JoinGameScreen({ navigation }: JoinGameScreenProps) {
       return;
     }
 
-    if (nickname.trim().length < 2) {
-      Alert.alert('Invalid Nickname', 'Nickname must be at least 2 characters long.');
+    // Sanitize and validate nickname
+    const nicknameResult = sanitizeUserInput(nickname, 'nickname');
+    if (!nicknameResult.isValid) {
+      Alert.alert('Invalid Nickname', nicknameResult.error || 'Please enter a valid nickname.');
       return;
     }
-
-    if (nickname.trim().length > 15) {
-      Alert.alert('Invalid Nickname', 'Nickname must be 15 characters or less.');
-      return;
-    }
+    const sanitizedNickname = nicknameResult.sanitized;
 
     setIsLoading(true);
 
@@ -47,7 +46,7 @@ export default function JoinGameScreen({ navigation }: JoinGameScreenProps) {
       const playerId = await signInAnonymous();
 
       // Join the game
-      await joinGame(gameCode.trim().toUpperCase(), playerId, nickname.trim());
+      await joinGame(gameCode.trim().toUpperCase(), playerId, sanitizedNickname);
 
       // Navigate to lobby
       navigation.replace('Lobby', { gameCode: gameCode.trim().toUpperCase(), playerId });

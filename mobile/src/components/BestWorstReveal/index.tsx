@@ -79,6 +79,10 @@ export default function BestWorstReveal({
   const snarkOpacity = useRef(new Animated.Value(0)).current;
   const snarkScale = useRef(new Animated.Value(0.8)).current;
   const buttonOpacity = useRef(new Animated.Value(0)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  // Auto-progression duration in milliseconds
+  const AUTO_PROGRESS_DURATION = 8000;
 
   // Emoji reaction handlers
   const handleEmojiPress = useCallback((emoji: string) => {
@@ -210,14 +214,26 @@ export default function BestWorstReveal({
     return () => clearTimeout(timer);
   }, [phase]);
 
-  // Auto-transition after 3.5 seconds when complete and can continue
+  // Auto-transition with progress bar when complete and can continue
   useEffect(() => {
     if (phase === 'complete' && canContinue) {
+      // Reset and start progress bar animation
+      progressAnim.setValue(0);
+      const progressAnimation = Animated.timing(progressAnim, {
+        toValue: 1,
+        duration: AUTO_PROGRESS_DURATION,
+        useNativeDriver: false,
+      });
+      progressAnimation.start();
+
       const timer = setTimeout(() => {
         onComplete();
-      }, 3500);
+      }, AUTO_PROGRESS_DURATION);
 
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+        progressAnimation.stop();
+      };
     }
   }, [phase, canContinue, onComplete]);
 
@@ -337,9 +353,26 @@ export default function BestWorstReveal({
         {phase === 'complete' && (
           <Animated.View style={[styles.buttonContainer, { opacity: buttonOpacity }]}>
             {canContinue ? (
-              <TouchableOpacity style={styles.button} onPress={onComplete}>
-                <Text style={styles.buttonText}>Continue</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity style={styles.button} onPress={onComplete}>
+                  <Text style={styles.buttonText}>Continue</Text>
+                </TouchableOpacity>
+                {/* Progress bar showing auto-progression countdown */}
+                <View style={styles.progressBarContainer}>
+                  <Animated.View
+                    style={[
+                      styles.progressBar,
+                      {
+                        width: progressAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0%', '100%'],
+                        }),
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.autoProgressText}>Auto-continuing...</Text>
+              </>
             ) : (
               <Text style={styles.waitingText}>
                 Waiting for {nextAskerName || 'host'} to continue...
@@ -474,6 +507,25 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: FontSizes.md,
     textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  progressBarContainer: {
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 2,
+    marginTop: Spacing.sm,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: Colors.primary,
+    borderRadius: 2,
+  },
+  autoProgressText: {
+    color: Colors.textMuted,
+    fontSize: FontSizes.xs,
+    textAlign: 'center',
+    marginTop: Spacing.xs,
     fontStyle: 'italic',
   },
   floatingEmojiContainer: {

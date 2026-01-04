@@ -405,16 +405,22 @@ export const calculateAndSubmitResults = async (
     const guesses = game.guesses[`round_${roundNumber}`] || {};
     const correctAnswer = game.currentQuestion?.answer || 0;
 
-    // Calculate percentage errors
+    // Calculate percentage errors (use absolute difference when answer is 0 to avoid division by zero)
     const rankings = Object.entries(guesses).map(([playerId, guess]) => {
+      const guessValue = guess.value ?? null; // Ensure undefined becomes null for Firebase
       let percentageError: number | null = null;
-      if (guess.value !== null && correctAnswer !== 0) {
-        percentageError = Math.abs((guess.value - correctAnswer) / correctAnswer) * 100;
+      if (guessValue !== null) {
+        if (correctAnswer !== 0) {
+          percentageError = Math.abs((guessValue - correctAnswer) / correctAnswer) * 100;
+        } else {
+          // When correct answer is 0, use absolute difference for ranking
+          percentageError = Math.abs(guessValue - correctAnswer);
+        }
       }
 
       return {
         playerId,
-        guess: guess.value,
+        guess: guessValue,
         percentageError,
         pointsAwarded: 0,
       };
@@ -433,8 +439,16 @@ export const calculateAndSubmitResults = async (
 
     // Award points based on whether anyone actually answered
     if (actualGuesses.length > 0) {
-      // Best guess gets +1, everyone else who answered gets 0 (default)
+      // Best guess gets +1
       actualGuesses[0].pointsAwarded = 1;
+
+      // Worst guess penalty logic:
+      // - If anyone didn't submit (timeout): they get -1, worst guesser gets 0
+      // - If everyone submitted: worst guesser gets -1
+      if (nonResponses.length === 0 && actualGuesses.length > 1) {
+        // Everyone submitted - worst guesser gets -1
+        actualGuesses[actualGuesses.length - 1].pointsAwarded = -1;
+      }
     }
 
     // All non-responders get -1 penalty

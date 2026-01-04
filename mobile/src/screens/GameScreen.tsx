@@ -34,6 +34,7 @@ import BestWorstReveal from '../components/BestWorstReveal';
 import BinaryLoader from '../components/BinaryLoader';
 import AnimatedNumber from '../components/AnimatedNumber';
 import { success, mediumTap } from '../utils/haptics';
+import { sanitizeUserInput } from '../utils/sanitize';
 
 type GameScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Game'>;
@@ -76,8 +77,10 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
           navigation.replace('GameEnd', { gameCode, playerId });
         }
 
-        // Auto-calculate results when all players have guessed
-        if (updatedGame.status === 'guessing' && shouldAutoCalculateResults(updatedGame)) {
+        // Auto-calculate results when all players have guessed (only asker should trigger)
+        if (updatedGame.status === 'guessing' &&
+            shouldAutoCalculateResults(updatedGame) &&
+            updatedGame.currentQuestion?.askedBy === playerId) {
           handleTimerExpire(updatedGame);
         }
 
@@ -107,8 +110,10 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
   // ========== Question Entry Functions ==========
 
   const handleValidateQuestion = async () => {
-    if (questionText.trim().length < 5) {
-      Alert.alert('Invalid Question', 'Please enter a longer question.');
+    // Sanitize and validate question
+    const questionResult = sanitizeUserInput(questionText, 'question');
+    if (!questionResult.isValid) {
+      Alert.alert('Invalid Question', questionResult.error || 'Please enter a valid question.');
       return;
     }
 
@@ -118,7 +123,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     setShowApiErrorFallback(false);
 
     try {
-      const result = await validateQuestion(questionText.trim());
+      const result = await validateQuestion(questionResult.sanitized);
 
       if (result.isValid && result.answer !== undefined) {
         setValidatedAnswer(result.answer);
@@ -229,7 +234,20 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
 
   const handleConfirmQuestion = async (answer: number, units?: string) => {
     try {
-      await submitQuestion(gameCode, playerId, questionText.trim(), answer, units);
+      // Sanitize question text and units before submission
+      const questionResult = sanitizeUserInput(questionText, 'question');
+      if (!questionResult.isValid) {
+        Alert.alert('Invalid Question', questionResult.error || 'Please enter a valid question.');
+        return;
+      }
+
+      let sanitizedUnits = units;
+      if (units) {
+        const unitsResult = sanitizeUserInput(units, 'units');
+        sanitizedUnits = unitsResult.sanitized;
+      }
+
+      await submitQuestion(gameCode, playerId, questionResult.sanitized, answer, sanitizedUnits);
       setQuestionText('');
       setValidatedAnswer(null);
       setValidatedUnits(undefined);
@@ -905,14 +923,11 @@ function StandingsView({ game, playerId, onNextRound }: any) {
                 </View>
               </View>
               <View style={styles.standingScore}>
-                {standing.score !== 0 && (
-                  <AnimatedNumber
-                    value={standing.score}
-                    style={styles.standingScoreText}
-                    prefix={standing.score > 0 ? '+' : ''}
-                    duration={600}
-                  />
-                )}
+                <AnimatedNumber
+                  value={standing.score}
+                  style={styles.standingScoreText}
+                  duration={600}
+                />
               </View>
             </View>
           );

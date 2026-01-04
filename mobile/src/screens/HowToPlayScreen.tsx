@@ -64,7 +64,7 @@ export default function HowToPlayScreen({ navigation }: HowToPlayScreenProps) {
 
           <Text style={styles.stepTitle}>4. Scoring</Text>
           <Text style={styles.text}>
-            The person with the closest guess wins the round, receives points, and asks the next question.
+            Closest guess: +1 point. Furthest guess: -1 point. Winner asks the next question.
           </Text>
 
           <Text style={styles.stepTitle}>5. Shame the Loser</Text>
