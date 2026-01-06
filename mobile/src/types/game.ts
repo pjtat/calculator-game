@@ -65,6 +65,10 @@ export interface Game {
   guesses: { [roundId: string]: { [playerId: string]: Guess } };
   roundResults: { [roundId: string]: RoundResult };
   nextAsker: string;
+  // Play with Bots mode fields
+  askerRotation?: string[];  // Ordered list of player IDs for asking turns
+  askerRotationIndex?: number;  // Current index in the rotation
+  isBotThinking?: boolean;  // Whether a bot is currently "thinking" of a question
 }
 
 // Helper type for local player state

@@ -38,6 +38,9 @@ mobile/src/config/env.ts
 # typescript
 *.tsbuildinfo
 
+# Claude Code plans
+PLAN*.md
+
 # generated native folders
 /mobile/ios
 /mobile/android

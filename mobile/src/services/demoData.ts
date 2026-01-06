@@ -1,12 +1,12 @@
 import { Game } from '../types/game';
-import { DEMO_ASKER, DEMO_PARTICIPANT, DEMO_USER_ID, BOT_PLAYERS } from './demoEngine';
+import { DEMO_ASKER, DEMO_PARTICIPANT, DEMO_USER_ID, BOT_PLAYERS, PLAY_WITH_BOTS, generateAskerRotation } from './demoEngine';
 
 // Legacy demo mode (keep for existing tests)
 export const DEMO_GAME_CODE = 'DEMO01';
 export const DEMO_PLAYER_ID = 'demo-player-1';
 
 // Export new demo constants
-export { DEMO_ASKER, DEMO_PARTICIPANT, DEMO_USER_ID };
+export { DEMO_ASKER, DEMO_PARTICIPANT, DEMO_USER_ID, PLAY_WITH_BOTS };
 
 export const getDemoGame = (status: Game['status'] = 'waiting'): Game => {
   const baseGame: Game = {
@@ -699,5 +699,34 @@ export const getDemoParticipantLobby = (): Game => {
     guesses: {},
     roundResults: {},
     currentQuestion: undefined,
+  };
+};
+
+// ==================== Play with Bots Mode ====================
+
+// Play with Bots: Configurable rounds, user asks every 3rd question
+export const getPlayWithBotsLobby = (totalRounds: number = 9): Game => {
+  const askerRotation = generateAskerRotation(totalRounds);
+  const firstAsker = askerRotation[0];
+
+  return {
+    status: 'waiting',
+    currentRound: 0,
+    nextAsker: firstAsker,
+    players: createDemoPlayers(true),
+    config: {
+      hostId: DEMO_USER_ID,
+      gameMode: 'rounds',
+      targetRounds: totalRounds,
+      targetScore: 10,
+      timerDuration: 45,
+      createdAt: Date.now(),
+    },
+    guesses: {},
+    roundResults: {},
+    currentQuestion: undefined,
+    askerRotation,
+    askerRotationIndex: 0,
+    isBotThinking: false,
   };
 };

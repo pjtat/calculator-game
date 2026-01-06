@@ -53,7 +53,11 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
     .sort((a, b) => b.score - a.score);
 
   const winner = sortedPlayers[0];
-  const runnerUp = sortedPlayers[1];
+  // Find all players tied for 2nd place
+  const secondPlaceScore = sortedPlayers[1]?.score;
+  const runnersUp = sortedPlayers.filter(
+    (p, idx) => idx > 0 && p.score === secondPlaceScore
+  );
   const isCurrentPlayerWinner = winner?.id === playerId;
 
   return (
@@ -78,11 +82,11 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
           />
         </View>
 
-        {/* Runner Up */}
-        {runnerUp && (
+        {/* Runner Up(s) */}
+        {runnersUp.length > 0 && (
           <View style={styles.runnerUpSection}>
             <Text style={styles.runnerUpText}>
-              🥈 Runner-up: {runnerUp.nickname} ({runnerUp.score} points)
+              🥈 Runner-up{runnersUp.length > 1 ? 's' : ''}: {runnersUp.map(p => p.nickname).join(', ')} ({secondPlaceScore} points)
             </Text>
           </View>
         )}
@@ -101,10 +105,6 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
                 ? `${game.config.targetRounds} Rounds`
                 : `First to ${game.config.targetScore}`}
             </Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Players:</Text>
-            <Text style={styles.summaryValue}>{Object.keys(game.players).length}</Text>
           </View>
         </View>
 
@@ -193,6 +193,7 @@ const styles = StyleSheet.create({
   winnerLabel: {
     fontSize: 24,
     marginBottom: Spacing.md,
+    color: Colors.text,
   },
   winnerName: {
     fontSize: 42,

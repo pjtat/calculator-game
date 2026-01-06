@@ -4,6 +4,7 @@ import { Colors, Spacing, FontSizes, FontWeights, BorderRadius } from '../../con
 import { FeatureFlags } from '../../constants/featureFlags';
 import type { RoundRanking, Player } from '../../types/game';
 import { selection, mediumTap, success } from '../../utils/haptics';
+import { formatDisplayNumber } from '../../utils/formatting';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SCALE_HEIGHT = SCREEN_HEIGHT * 0.68; // Use 68% of screen for scale (leaves room for button)
@@ -516,7 +517,7 @@ export default function AnswerReveal({
                 styles.correctAnswerValue,
                 isSlotMachineSpinning && styles.correctAnswerValueSpinning
               ]}>
-                {slotMachineNumber.toLocaleString()}
+                {formatDisplayNumber(slotMachineNumber, questionText)}
               </Text>
               {units && <Text style={styles.correctAnswerUnits}> {units}</Text>}
             </Animated.View>
@@ -583,7 +584,7 @@ export default function AnswerReveal({
 
                   {/* Guess value (full number) */}
                   <Text style={[styles.guessValue, { color }]}>
-                    {ranking.guess !== null ? ranking.guess.toLocaleString() : 'No guess'}
+                    {ranking.guess !== null ? formatDisplayNumber(ranking.guess, questionText) : 'No guess'}
                   </Text>
 
                   {/* Player name + points (revealed later) */}

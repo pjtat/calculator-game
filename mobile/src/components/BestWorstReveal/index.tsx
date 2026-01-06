@@ -6,6 +6,7 @@ import FloatingEmoji from './FloatingEmoji';
 import EmojiPicker from './EmojiPicker';
 import { useReactionSync } from './useReactionSync';
 import { submitReaction } from '../../services/firebase';
+import { formatDisplayNumber } from '../../utils/formatting';
 import { FloatingEmoji as FloatingEmojiType } from './types';
 
 type RevealPhase = 'best' | 'worst' | 'snark' | 'complete';
@@ -283,7 +284,7 @@ export default function BestWorstReveal({
                 {bestPlayer.id === currentPlayerId && ' (You)'}
               </Text>
               <Text style={styles.guessValue}>
-                {bestPlayer.guess.toLocaleString()} {units || ''}
+                {formatDisplayNumber(bestPlayer.guess, questionText)} {units || ''}
               </Text>
               <Text style={styles.accuracy}>
                 {calculateAccuracy(bestPlayer.percentError)}
@@ -312,7 +313,7 @@ export default function BestWorstReveal({
                 {worstPlayer.id === currentPlayerId && ' (You)'}
               </Text>
               <Text style={styles.guessValue}>
-                {worstPlayer.guess !== null ? `${worstPlayer.guess.toLocaleString()} ${units || ''}` : 'No guess'}
+                {worstPlayer.guess !== null ? `${formatDisplayNumber(worstPlayer.guess, questionText)} ${units || ''}` : 'No guess'}
               </Text>
               <Text style={styles.percentOff}>
                 {calculatePercentOff(worstPlayer.percentError)}

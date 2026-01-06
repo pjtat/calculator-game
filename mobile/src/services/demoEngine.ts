@@ -4,6 +4,7 @@ import { CurrentQuestion } from '../types/game';
 export const DEMO_ASKER = 'DEMOASK';
 export const DEMO_PARTICIPANT = 'DEMOPAR';
 export const DEMO_USER_ID = 'demo-user';
+export const PLAY_WITH_BOTS = 'BOTPLAY';
 
 // Bot player definitions
 export interface BotPlayer {
@@ -13,12 +14,12 @@ export interface BotPlayer {
 }
 
 export const BOT_PLAYERS: BotPlayer[] = [
-  { id: 'demo-bot-1', nickname: 'Alex', offset: 0.05 },     // +5% (very close)
-  { id: 'demo-bot-2', nickname: 'Riley', offset: -0.12 },   // -12% (good)
-  { id: 'demo-bot-3', nickname: 'Jordan', offset: 0.40 },   // +40% (medium)
-  { id: 'demo-bot-4', nickname: 'Casey', offset: -0.33 },   // -33% (medium)
-  { id: 'demo-bot-5', nickname: 'Taylor', offset: 0.85 },   // +85% (bad)
-  { id: 'demo-bot-6', nickname: 'Morgan', offset: -0.60 },  // -60% (bad)
+  { id: 'demo-bot-1', nickname: 'Ward', offset: 0.05 },      // +5% (very close)
+  { id: 'demo-bot-2', nickname: 'Porter', offset: -0.12 },   // -12% (good)
+  { id: 'demo-bot-3', nickname: 'Bettis', offset: 0.40 },    // +40% (medium)
+  { id: 'demo-bot-4', nickname: 'Polamalu', offset: -0.33 }, // -33% (medium)
+  { id: 'demo-bot-5', nickname: 'Hampton', offset: 0.85 },   // +85% (bad)
+  { id: 'demo-bot-6', nickname: 'Ike', offset: -0.60 },      // -60% (bad)
 ];
 
 // Pre-curated questions for participant mode
@@ -98,4 +99,48 @@ export const scheduleBotSubmissions = (
       onBotSubmit(bot.id, guess, calculation);
     }, baseDelay + (index * 1500)); // Stagger by 1.5 seconds
   });
+};
+
+// ==================== Play with Bots Mode ====================
+
+// Generate asker rotation for Play with Bots mode
+// Pattern: Bot1 -> Bot2 -> USER -> Bot3 -> Bot4 -> USER -> Bot5 -> Bot6 -> USER -> repeat
+export const generateAskerRotation = (totalRounds: number): string[] => {
+  const rotation: string[] = [];
+  let botIndex = 0;
+
+  for (let i = 0; i < totalRounds; i++) {
+    // Every 3rd question (index 2, 5, 8, ...) is the user's turn
+    if ((i + 1) % 3 === 0) {
+      rotation.push(DEMO_USER_ID);
+    } else {
+      // Use bots in order, cycling through them
+      rotation.push(BOT_PLAYERS[botIndex % BOT_PLAYERS.length].id);
+      botIndex++;
+    }
+  }
+
+  return rotation;
+};
+
+// Get the next asker from the rotation
+export const getNextAskerFromRotation = (
+  rotation: string[],
+  currentIndex: number
+): { nextAsker: string; nextIndex: number } => {
+  const nextIndex = (currentIndex + 1) % rotation.length;
+  return {
+    nextAsker: rotation[nextIndex],
+    nextIndex,
+  };
+};
+
+// Check if a player ID is a bot
+export const isBot = (playerId: string): boolean => {
+  return BOT_PLAYERS.some(bot => bot.id === playerId);
+};
+
+// Get bot by ID
+export const getBotById = (botId: string): BotPlayer | undefined => {
+  return BOT_PLAYERS.find(bot => bot.id === botId);
 };

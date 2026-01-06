@@ -21,8 +21,10 @@ import {
   DEMO_ASKER,
   DEMO_PARTICIPANT,
   DEMO_USER_ID,
+  PLAY_WITH_BOTS,
   getDemoAskerLobby,
   getDemoParticipantLobby,
+  getPlayWithBotsLobby,
 } from './demoData';
 import {
   BOT_PLAYERS,
@@ -30,7 +32,11 @@ import {
   generateBotCalculation,
   scheduleBotSubmissions,
   getRandomDemoQuestion,
+  isBot,
+  getNextAskerFromRotation,
+  generateAskerRotation,
 } from './demoEngine';
+import { generateTriviaQuestion } from './gemini';
 
 // Legacy demo mode state (keep for existing tests)
 let demoGameState: Game = getDemoGame('waiting');
@@ -41,6 +47,11 @@ let demoAskerState: Game = getDemoAskerLobby();
 let demoParticipantState: Game = getDemoParticipantLobby();
 let demoAskerListeners: Array<(game: Game) => void> = [];
 let demoParticipantListeners: Array<(game: Game) => void> = [];
+
+// Play with Bots mode state
+let playWithBotsState: Game = getPlayWithBotsLobby(9);
+let playWithBotsListeners: Array<(game: Game) => void> = [];
+let playWithBotsPreviousQuestions: string[] = []; // Track asked questions to avoid repeats
 
 // Firebase configuration from app.config.ts extra (populated via environment variables)
 const extra = Constants.expoConfig?.extra;
@@ -254,6 +265,22 @@ export const startGame = async (gameCode: string): Promise<void> => {
     return;
   }
 
+  // Play with Bots mode
+  if (gameCode === PLAY_WITH_BOTS) {
+    playWithBotsState = {
+      ...playWithBotsState,
+      status: 'question_entry',
+      currentRound: 1,
+    };
+    updatePlayWithBots(playWithBotsState);
+
+    // If first asker is a bot, generate a question
+    if (isBot(playWithBotsState.nextAsker)) {
+      handleBotAskQuestion();
+    }
+    return;
+  }
+
   try {
     await update(ref(database, `games/${gameCode}`), {
       status: 'question_entry',
@@ -307,6 +334,61 @@ export const submitQuestion = async (
       },
     };
     updateDemoAsker(demoAskerState);
+    return;
+  }
+
+  // Play with Bots mode - user asked a question
+  if (gameCode === PLAY_WITH_BOTS && playerId === DEMO_USER_ID) {
+    // Track the question to avoid repeats
+    playWithBotsPreviousQuestions.push(questionText);
+
+    // Capture round number for closures
+    const currentRound = playWithBotsState.currentRound;
+    const roundKey = `round_${currentRound}`;
+
+    // First, update state with the question and empty guesses
+    playWithBotsState = {
+      ...playWithBotsState,
+      currentQuestion: question,
+      status: 'guessing',
+      guesses: {
+        ...playWithBotsState.guesses,
+        [roundKey]: {},
+      },
+      isBotThinking: false,
+    };
+    updatePlayWithBots(playWithBotsState);
+
+    // Then stagger bot guesses one by one
+    BOT_PLAYERS.forEach((bot, index) => {
+      setTimeout(() => {
+        // Safety check: make sure we're still on the same round
+        if (playWithBotsState.currentRound !== currentRound) {
+          return;
+        }
+
+        const botGuess = generateBotGuess(answer, bot);
+        const botCalculation = generateBotCalculation(botGuess);
+
+        const currentGuesses = playWithBotsState.guesses[roundKey] || {};
+        playWithBotsState = {
+          ...playWithBotsState,
+          guesses: {
+            ...playWithBotsState.guesses,
+            [roundKey]: {
+              ...currentGuesses,
+              [bot.id]: {
+                value: botGuess,
+                calculation: botCalculation,
+                submittedAt: Date.now(),
+              },
+            },
+          },
+        };
+        updatePlayWithBots(playWithBotsState);
+      }, (index + 1) * 600); // Stagger by 600ms each
+    });
+
     return;
   }
 
@@ -370,6 +452,63 @@ export const submitGuess = async (
     return;
   }
 
+  // Play with Bots mode - user submitted guess
+  if (gameCode === PLAY_WITH_BOTS && playerId === DEMO_USER_ID) {
+    const correctAnswer = playWithBotsState.currentQuestion?.answer || 0;
+    const askerId = playWithBotsState.currentQuestion?.askedBy || '';
+
+    // Capture round number for closures
+    const currentRound = playWithBotsState.currentRound;
+    const roundKey = `round_${roundNumber}`;
+
+    // Get all bots except the asker
+    const guessingBots = BOT_PLAYERS.filter(bot => bot.id !== askerId);
+
+    // First, add just the user's guess
+    playWithBotsState = {
+      ...playWithBotsState,
+      guesses: {
+        ...playWithBotsState.guesses,
+        [roundKey]: {
+          [DEMO_USER_ID]: guess,
+        },
+      },
+    };
+    updatePlayWithBots(playWithBotsState);
+
+    // Then stagger bot guesses one by one
+    guessingBots.forEach((bot, index) => {
+      setTimeout(() => {
+        // Safety check: make sure we're still on the same round
+        if (playWithBotsState.currentRound !== currentRound) {
+          return;
+        }
+
+        const botGuess = generateBotGuess(correctAnswer, bot);
+        const botCalculation = generateBotCalculation(botGuess);
+
+        const currentGuesses = playWithBotsState.guesses[roundKey] || {};
+        playWithBotsState = {
+          ...playWithBotsState,
+          guesses: {
+            ...playWithBotsState.guesses,
+            [roundKey]: {
+              ...currentGuesses,
+              [bot.id]: {
+                value: botGuess,
+                calculation: botCalculation,
+                submittedAt: Date.now(),
+              },
+            },
+          },
+        };
+        updatePlayWithBots(playWithBotsState);
+      }, (index + 1) * 600); // Stagger by 600ms each
+    });
+
+    return;
+  }
+
   try {
     await set(
       ref(database, `games/${gameCode}/guesses/round_${roundNumber}/${playerId}`),
@@ -396,6 +535,8 @@ export const calculateAndSubmitResults = async (
       game = demoParticipantState;
     } else if (gameCode === DEMO_GAME_CODE) {
       game = demoGameState;
+    } else if (gameCode === PLAY_WITH_BOTS) {
+      game = playWithBotsState;
     } else {
       const gameRef = ref(database, `games/${gameCode}`);
       const snapshot = await get(gameRef);
@@ -496,10 +637,11 @@ export const calculateAndSubmitResults = async (
     };
 
     // Update game state - handle demo modes
-    if (gameCode === DEMO_ASKER || gameCode === DEMO_PARTICIPANT || gameCode === DEMO_GAME_CODE) {
+    if (gameCode === DEMO_ASKER || gameCode === DEMO_PARTICIPANT || gameCode === DEMO_GAME_CODE || gameCode === PLAY_WITH_BOTS) {
       // Update in-memory demo state
       const currentState = gameCode === DEMO_ASKER ? demoAskerState :
                            gameCode === DEMO_PARTICIPANT ? demoParticipantState :
+                           gameCode === PLAY_WITH_BOTS ? playWithBotsState :
                            demoGameState;
 
       // Update player scores
@@ -511,8 +653,18 @@ export const calculateAndSubmitResults = async (
 
       // Update round results and status
       currentState.roundResults[`round_${roundNumber}`] = result;
-      // In demo modes, always set user as next asker so auto-transitions work
-      currentState.nextAsker = DEMO_USER_ID;
+
+      // For Play with Bots, use rotation; for other demos, set user as next asker
+      if (gameCode === PLAY_WITH_BOTS && currentState.askerRotation && currentState.askerRotationIndex !== undefined) {
+        const { nextAsker, nextIndex } = getNextAskerFromRotation(
+          currentState.askerRotation,
+          currentState.askerRotationIndex
+        );
+        currentState.nextAsker = nextAsker;
+        currentState.askerRotationIndex = nextIndex;
+      } else {
+        currentState.nextAsker = DEMO_USER_ID;
+      }
       currentState.status = 'results';
 
       // Notify listeners
@@ -520,6 +672,8 @@ export const calculateAndSubmitResults = async (
         updateDemoAsker({ ...currentState });
       } else if (gameCode === DEMO_PARTICIPANT) {
         updateDemoParticipant({ ...currentState });
+      } else if (gameCode === PLAY_WITH_BOTS) {
+        updatePlayWithBots({ ...currentState });
       } else {
         updateDemoGame({ ...currentState });
       }
@@ -550,6 +704,8 @@ export const checkWinCondition = async (gameCode: string): Promise<boolean> => {
       game = demoParticipantState;
     } else if (gameCode === DEMO_GAME_CODE) {
       game = demoGameState;
+    } else if (gameCode === PLAY_WITH_BOTS) {
+      game = playWithBotsState;
     } else {
       const gameRef = ref(database, `games/${gameCode}`);
       const snapshot = await get(gameRef);
@@ -587,6 +743,10 @@ export const moveToBestWorst = async (gameCode: string): Promise<void> => {
       demoGameState.status = 'best_worst_reveal';
       updateDemoGame({ ...demoGameState });
       return;
+    } else if (gameCode === PLAY_WITH_BOTS) {
+      playWithBotsState.status = 'best_worst_reveal';
+      updatePlayWithBots({ ...playWithBotsState });
+      return;
     }
 
     await update(ref(database, `games/${gameCode}`), {
@@ -614,6 +774,10 @@ export const moveToStandings = async (gameCode: string): Promise<void> => {
     } else if (gameCode === DEMO_GAME_CODE) {
       demoGameState.status = 'standings';
       updateDemoGame({ ...demoGameState });
+      return;
+    } else if (gameCode === PLAY_WITH_BOTS) {
+      playWithBotsState.status = 'standings';
+      updatePlayWithBots({ ...playWithBotsState });
       return;
     }
 
@@ -649,6 +813,23 @@ export const advanceToNextRound = async (gameCode: string): Promise<void> => {
         demoGameState.currentRound = demoGameState.currentRound + 1;
         demoGameState.currentQuestion = undefined;
         updateDemoGame({ ...demoGameState });
+      }
+      return;
+    } else if (gameCode === PLAY_WITH_BOTS) {
+      const isGameOver = await checkWinCondition(gameCode);
+      if (isGameOver) {
+        playWithBotsState.status = 'ended';
+        updatePlayWithBots({ ...playWithBotsState });
+      } else {
+        playWithBotsState.status = 'question_entry';
+        playWithBotsState.currentRound = playWithBotsState.currentRound + 1;
+        playWithBotsState.currentQuestion = undefined;
+        updatePlayWithBots({ ...playWithBotsState });
+
+        // If next asker is a bot, trigger bot question generation
+        if (isBot(playWithBotsState.nextAsker)) {
+          handleBotAskQuestion();
+        }
       }
       return;
     }
@@ -709,6 +890,15 @@ export const listenToGame = (
     };
   }
 
+  // Play with Bots mode
+  if (gameCode === PLAY_WITH_BOTS) {
+    playWithBotsListeners.push(callback);
+    callback(playWithBotsState);
+    return () => {
+      playWithBotsListeners = playWithBotsListeners.filter(cb => cb !== callback);
+    };
+  }
+
   const gameRef = ref(database, `games/${gameCode}`);
 
   const unsubscribe = onValue(gameRef, (snapshot) => {
@@ -738,6 +928,85 @@ const updateDemoAsker = (newState: Game) => {
 const updateDemoParticipant = (newState: Game) => {
   demoParticipantState = newState;
   demoParticipantListeners.forEach(listener => listener(demoParticipantState));
+};
+
+// Play with Bots helpers
+const updatePlayWithBots = (newState: Game) => {
+  playWithBotsState = newState;
+  playWithBotsListeners.forEach(listener => listener(playWithBotsState));
+};
+
+// Handle bot asking a question via Gemini
+const handleBotAskQuestion = async () => {
+  // Show "bot is thinking" state
+  playWithBotsState.isBotThinking = true;
+  updatePlayWithBots({ ...playWithBotsState });
+
+  // Wait a moment for UX
+  await new Promise(resolve => setTimeout(resolve, 1500));
+
+  // Generate question via Gemini
+  const result = await generateTriviaQuestion(playWithBotsPreviousQuestions);
+
+  if (result.success && result.question && result.answer !== undefined) {
+    const question: CurrentQuestion = {
+      text: result.question,
+      answer: result.answer,
+      units: result.units,
+      askedBy: playWithBotsState.nextAsker,
+      submittedAt: Date.now(),
+    };
+
+    // Track question to avoid repeats
+    playWithBotsPreviousQuestions.push(result.question);
+
+    playWithBotsState = {
+      ...playWithBotsState,
+      currentQuestion: question,
+      status: 'guessing',
+      isBotThinking: false,
+      guesses: {
+        ...playWithBotsState.guesses,
+        [`round_${playWithBotsState.currentRound}`]: {},
+      },
+    };
+    updatePlayWithBots(playWithBotsState);
+  } else {
+    // Fallback to a default question if Gemini fails
+    const fallbackQuestions = [
+      { text: 'How many bones are in the human body?', answer: 206, units: 'bones' },
+      { text: 'How many countries are in the United Nations?', answer: 193, units: 'countries' },
+      { text: 'How tall is Mount Everest in feet?', answer: 29032, units: 'feet' },
+    ];
+    const fallback = fallbackQuestions[Math.floor(Math.random() * fallbackQuestions.length)];
+
+    const question: CurrentQuestion = {
+      text: fallback.text,
+      answer: fallback.answer,
+      units: fallback.units,
+      askedBy: playWithBotsState.nextAsker,
+      submittedAt: Date.now(),
+    };
+
+    playWithBotsState = {
+      ...playWithBotsState,
+      currentQuestion: question,
+      status: 'guessing',
+      isBotThinking: false,
+      guesses: {
+        ...playWithBotsState.guesses,
+        [`round_${playWithBotsState.currentRound}`]: {},
+      },
+    };
+    updatePlayWithBots(playWithBotsState);
+  }
+};
+
+// Initialize Play with Bots mode with custom round count
+export const initPlayWithBots = (totalRounds: number) => {
+  playWithBotsState = getPlayWithBotsLobby(totalRounds);
+  playWithBotsPreviousQuestions = [];
+  updatePlayWithBots(playWithBotsState);
 };
 
 // Export function to advance demo mode (for debugging/navigation)

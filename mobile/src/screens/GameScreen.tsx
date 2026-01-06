@@ -20,6 +20,7 @@ import {
   submitQuestion,
   submitGuess,
   calculateAndSubmitResults,
+  moveToBestWorst,
   moveToStandings,
   advanceToNextRound,
 } from '../services/firebase';
@@ -35,6 +36,8 @@ import BinaryLoader from '../components/BinaryLoader';
 import AnimatedNumber from '../components/AnimatedNumber';
 import { success, mediumTap } from '../utils/haptics';
 import { sanitizeUserInput } from '../utils/sanitize';
+import { formatDisplayNumber } from '../utils/formatting';
+import { isBot, BOT_PLAYERS } from '../services/demoEngine';
 
 type GameScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Game'>;
@@ -78,9 +81,12 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
         }
 
         // Auto-calculate results when all players have guessed (only asker should trigger)
+        // In Play with Bots mode, user always triggers since bots can't
+        const isPlayWithBots = gameCode === 'BOTPLAY';
+        const canTriggerResults = isPlayWithBots || updatedGame.currentQuestion?.askedBy === playerId;
         if (updatedGame.status === 'guessing' &&
             shouldAutoCalculateResults(updatedGame) &&
-            updatedGame.currentQuestion?.askedBy === playerId) {
+            canTriggerResults) {
           handleTimerExpire(updatedGame);
         }
 
@@ -275,10 +281,13 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
 
     try {
       success(); // Haptic feedback on successful submission
-      await submitGuess(gameCode, game!.currentRound, playerId, guessValue, guessCalculation);
+      // Set hasSubmittedGuess BEFORE submitGuess to prevent race condition
+      // where the listener fires and overwrites with null guess
       setHasSubmittedGuess(true);
+      await submitGuess(gameCode, game!.currentRound, playerId, guessValue, guessCalculation);
     } catch (error) {
       console.error('Error submitting guess:', error);
+      setHasSubmittedGuess(false); // Reset on error
       Alert.alert('Error', 'Failed to submit guess. Please try again.');
     }
   };
@@ -287,14 +296,28 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     const currentGame = gameOverride || game;
     if (!currentGame) return;
 
+    // Only process if we're still in guessing phase
+    if (currentGame.status !== 'guessing') {
+      return;
+    }
+
+    // Check if user already has a guess in the game state (more reliable than local state)
+    const roundGuesses = currentGame.guesses?.[`round_${currentGame.currentRound}`];
+    const userAlreadyGuessed = roundGuesses && roundGuesses[playerId] !== undefined;
+
     // If player hasn't submitted, submit null guess
-    if (!hasSubmittedGuess && currentGame.currentQuestion?.askedBy !== playerId) {
+    // Check both local state AND game state to avoid race conditions
+    if (!hasSubmittedGuess && !userAlreadyGuessed && currentGame.currentQuestion?.askedBy !== playerId) {
       await submitGuess(gameCode, currentGame.currentRound, playerId, null, '');
       setHasSubmittedGuess(true);
     }
 
     // Calculate results (only one player should do this)
-    if (currentGame.currentQuestion?.askedBy === playerId && !isCalculatingResults) {
+    // In Play with Bots mode, the user always triggers results since bots can't
+    const isPlayWithBots = gameCode === 'BOTPLAY';
+    const shouldCalculate = isPlayWithBots || currentGame.currentQuestion?.askedBy === playerId;
+
+    if (shouldCalculate && !isCalculatingResults) {
       setIsCalculatingResults(true);
       try {
         await calculateAndSubmitResults(gameCode, currentGame.currentRound);
@@ -310,10 +333,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
 
   const handleContinueFromResults = async () => {
     try {
-      const database = getDatabase();
-      await update(ref(database, `games/${gameCode}`), {
-        status: 'best_worst_reveal',
-      });
+      await moveToBestWorst(gameCode);
     } catch (error) {
       console.error('Error moving to best/worst:', error);
       Alert.alert('Error', 'Failed to continue. Please try again.');
@@ -387,7 +407,10 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
         )}
 
         {game.status === 'question_entry' && !isNextAsker && (
-          <WaitingForQuestionView askerName={game.players[game.nextAsker]?.nickname || 'Player'} />
+          <WaitingForQuestionView
+            askerName={game.players[game.nextAsker]?.nickname || 'Player'}
+            isBotThinking={game.isBotThinking}
+          />
         )}
 
         {game.status === 'guessing' && !isAsker && (
@@ -423,7 +446,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
             currentPlayerId={playerId}
             units={game.currentQuestion?.units}
             onComplete={handleContinueFromResults}
-            canContinue={game.nextAsker === playerId}
+            canContinue={game.nextAsker === playerId || gameCode === 'BOTPLAY'}
             nextAskerName={game.players[game.nextAsker]?.nickname}
           />
         )}
@@ -448,7 +471,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
             snarkyRemark={game.roundResults[`round_${game.currentRound}`].snarkyRemark || null}
             currentPlayerId={playerId}
             onComplete={handleViewStandings}
-            canContinue={game.nextAsker === playerId}
+            canContinue={game.nextAsker === playerId || gameCode === 'BOTPLAY'}
             nextAskerName={game.players[game.nextAsker]?.nickname}
             gameCode={gameCode}
             currentRound={game.currentRound}
@@ -460,6 +483,7 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
             game={game}
             playerId={playerId}
             onNextRound={handleNextRound}
+            gameCode={gameCode}
           />
         )}
       </ScrollView>
@@ -568,7 +592,7 @@ function QuestionEntryView({
           <View style={styles.currentAnswerPreview}>
             <Text style={styles.currentAnswerLabel}>Current:</Text>
             <Text style={styles.currentAnswerText}>
-              {validatedAnswer.toLocaleString()} {validatedUnits || ''}
+              {formatDisplayNumber(validatedAnswer, questionText)} {validatedUnits || ''}
             </Text>
           </View>
 
@@ -621,7 +645,7 @@ function QuestionEntryView({
 
         <View style={styles.foundAnswerContainer}>
           <Text style={styles.foundAnswerLabel}>Answer:</Text>
-          <Text style={styles.foundAnswerValue}>{validatedAnswer.toLocaleString()}</Text>
+          <Text style={styles.foundAnswerValue}>{formatDisplayNumber(validatedAnswer, questionText)}</Text>
           {validatedUnits && <Text style={styles.foundAnswerUnits}>{validatedUnits}</Text>}
         </View>
 
@@ -682,11 +706,18 @@ function QuestionEntryView({
   );
 }
 
-function WaitingForQuestionView({ askerName }: any) {
+function WaitingForQuestionView({ askerName, isBotThinking }: { askerName: string; isBotThinking?: boolean }) {
   return (
     <View style={styles.centeredContainer}>
       <BinaryLoader />
-      <Text style={styles.waitingText}>Waiting for {askerName} to ask a question...</Text>
+      <Text style={styles.waitingText}>
+        {isBotThinking
+          ? `${askerName} is thinking of a question...`
+          : `Waiting for ${askerName} to ask a question...`}
+      </Text>
+      {isBotThinking && (
+        <Text style={styles.botThinkingSubtext}>AI generating trivia question</Text>
+      )}
     </View>
   );
 }
@@ -778,7 +809,7 @@ function AskerWaitingView({ question, answer, duration, game, onTimerExpire }: a
 
       <View style={styles.answerContainer}>
         <Text style={styles.answerLabel}>Correct Answer:</Text>
-        <Text style={styles.answerValue}>{answer.toLocaleString()}</Text>
+        <Text style={styles.answerValue}>{formatDisplayNumber(answer, question)}</Text>
         {units && <Text style={styles.answerUnits}>{units}</Text>}
       </View>
 
@@ -791,11 +822,12 @@ function AskerWaitingView({ question, answer, duration, game, onTimerExpire }: a
   );
 }
 
-function ResultsView({ game, playerId, isWinner, onViewStandings }: any) {
+function ResultsView({ game, playerId, isWinner, onViewStandings, gameCode }: any) {
   const roundResult = game.roundResults[`round_${game.currentRound}`];
   if (!roundResult) return null;
 
-  const canContinue = game.nextAsker === playerId;
+  const isPlayWithBots = gameCode === 'BOTPLAY';
+  const canContinue = game.nextAsker === playerId || isPlayWithBots;
 
   return (
     <View style={styles.phaseContainer}>
@@ -803,7 +835,7 @@ function ResultsView({ game, playerId, isWinner, onViewStandings }: any) {
 
       <View style={styles.answerContainer}>
         <Text style={styles.answerLabel}>Correct Answer:</Text>
-        <Text style={styles.answerValue}>{roundResult.correctAnswer.toLocaleString()}</Text>
+        <Text style={styles.answerValue}>{formatDisplayNumber(roundResult.correctAnswer, game.currentQuestion?.text)}</Text>
       </View>
 
       <ScrollView style={styles.rankingsList}>
@@ -829,11 +861,11 @@ function ResultsView({ game, playerId, isWinner, onViewStandings }: any) {
                   {player.nickname}
                   <Text style={styles.rankingGuess}>
                     {' - '}
-                    {ranking.guess !== null ? ranking.guess.toLocaleString() : 'No guess'}
+                    {ranking.guess !== null ? formatDisplayNumber(ranking.guess, game.currentQuestion?.text) : 'No guess'}
                   </Text>
                   {difference !== null && (
                     <Text style={styles.rankingDifference}>
-                      {' '}(off by {difference.toLocaleString()})
+                      {' '}(off by {formatDisplayNumber(difference, game.currentQuestion?.text)})
                     </Text>
                   )}
                 </Text>
@@ -870,8 +902,18 @@ function ResultsView({ game, playerId, isWinner, onViewStandings }: any) {
   );
 }
 
-function StandingsView({ game, playerId, onNextRound }: any) {
-  const canContinue = game.nextAsker === playerId;
+function StandingsView({ game, playerId, onNextRound, gameCode }: any) {
+  const isPlayWithBots = gameCode === 'BOTPLAY';
+  const canContinue = game.nextAsker === playerId || isPlayWithBots;
+
+  // Get point changes from current round
+  const roundResult = game.roundResults?.[`round_${game.currentRound}`];
+  const pointChanges: { [playerId: string]: number } = {};
+  if (roundResult?.rankings) {
+    roundResult.rankings.forEach((r: any) => {
+      pointChanges[r.playerId] = r.pointsAwarded || 0;
+    });
+  }
 
   // Create standings sorted by score
   const standings = Object.entries(game.players)
@@ -879,20 +921,20 @@ function StandingsView({ game, playerId, onNextRound }: any) {
       playerId: id,
       nickname: player.nickname,
       score: player.score,
+      pointChange: pointChanges[id] || 0,
     }))
     .sort((a, b) => b.score - a.score);
 
   // Determine win condition text
   const winConditionText = game.config.gameMode === 'rounds'
-    ? `First to ${game.config.targetRounds} rounds`
+    ? `Round ${game.currentRound} of ${game.config.targetRounds}`
     : `First to ${game.config.targetScore} points`;
 
   return (
     <View style={styles.phaseContainer}>
-      <Text style={styles.standingsTitle}>Overall Standings</Text>
+      <Text style={styles.standingsTitle}>Standings</Text>
 
       <View style={styles.standingsHeader}>
-        <Text style={styles.standingsRound}>Round {game.currentRound}</Text>
         <Text style={styles.standingsWinCondition}>{winConditionText}</Text>
       </View>
 
@@ -922,7 +964,15 @@ function StandingsView({ game, playerId, onNextRound }: any) {
                   {isLast && standings.length > 1 && <Text style={styles.standingEmoji}>💩</Text>}
                 </View>
               </View>
-              <View style={styles.standingScore}>
+              <View style={styles.standingScoreContainer}>
+                {standing.pointChange !== 0 && (
+                  <Text style={[
+                    styles.standingPointChange,
+                    standing.pointChange > 0 ? styles.pointChangePositive : styles.pointChangeNegative,
+                  ]}>
+                    {standing.pointChange > 0 ? '+' : ''}{standing.pointChange}
+                  </Text>
+                )}
                 <AnimatedNumber
                   value={standing.score}
                   style={styles.standingScoreText}
@@ -1180,6 +1230,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: Spacing.lg,
   },
+  botThinkingSubtext: {
+    fontSize: FontSizes.sm,
+    color: Colors.primary,
+    textAlign: 'center',
+    marginTop: Spacing.sm,
+    fontStyle: 'italic',
+  },
   questionText: {
     fontSize: 22,
     fontWeight: FontWeights.bold,
@@ -1424,6 +1481,23 @@ const styles = StyleSheet.create({
   standingScore: {
     minWidth: 50,
     alignItems: 'flex-end',
+  },
+  standingScoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minWidth: 80,
+    justifyContent: 'flex-end',
+  },
+  standingPointChange: {
+    fontSize: FontSizes.sm,
+    fontWeight: FontWeights.semibold,
+    marginRight: Spacing.sm,
+  },
+  pointChangePositive: {
+    color: '#3B82F6',
+  },
+  pointChangeNegative: {
+    color: '#FF4444',
   },
   standingScoreText: {
     fontSize: 24,

@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert, Modal } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import NumericRain from '../components/NumericRain';
 import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '../constants/theme';
+import { initPlayWithBots } from '../services/firebase';
 
 type HomeScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -18,6 +19,10 @@ const SUBTITLE_FONT_SIZE = Math.min(width * 0.045, 18);
 export default function HomeScreen({ navigation }: HomeScreenProps) {
   const [tapCount, setTapCount] = useState(0);
   const tapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [showBotsConfig, setShowBotsConfig] = useState(false);
+  const [selectedRounds, setSelectedRounds] = useState(9);
+
+  const roundOptions = [6, 9, 12, 15];
 
   const handleVersionTap = () => {
     // Clear existing timeout
@@ -31,39 +36,9 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     console.log('Version tap count:', newCount);
 
     if (newCount === 3) {
-      // Activate demo mode
+      // Activate Play with Bots mode directly
       setTapCount(0);
-      Alert.alert(
-        'Demo Mode',
-        'Choose your demo experience:',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => setTapCount(0),
-          },
-          {
-            text: 'Demo as Asker',
-            onPress: () => {
-              // Navigate to lobby with asker demo
-              navigation.navigate('Lobby', {
-                gameCode: 'DEMOASK',
-                playerId: 'demo-user',
-              });
-            },
-          },
-          {
-            text: 'Demo as Participant',
-            onPress: () => {
-              // Navigate to lobby with participant demo
-              navigation.navigate('Lobby', {
-                gameCode: 'DEMOPAR',
-                playerId: 'demo-user',
-              });
-            },
-          },
-        ]
-      );
+      setShowBotsConfig(true);
     } else {
       // Reset count after 2.5 seconds if not reached 3
       tapTimeoutRef.current = setTimeout(() => {
@@ -72,6 +47,18 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       }, 2500);
     }
   };
+
+  const handleStartBotsGame = () => {
+    initPlayWithBots(selectedRounds);
+    setShowBotsConfig(false);
+    navigation.navigate('Lobby', {
+      gameCode: 'BOTPLAY',
+      playerId: 'demo-user',
+    });
+  };
+
+  const getUserAsksCount = (rounds: number) => Math.floor(rounds / 3);
+  const getBotAsksCount = (rounds: number) => rounds - getUserAsksCount(rounds);
 
   return (
     <View style={styles.container}>
@@ -121,9 +108,68 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         style={styles.versionContainer}
       >
         <Text style={styles.version}>
-          v1.0.0 {tapCount > 0 && `(${tapCount}/3)`}
+          v1.0.1 {tapCount > 0 && `(${tapCount}/3)`}
         </Text>
       </TouchableOpacity>
+
+      {/* Play with Bots Configuration Modal */}
+      <Modal
+        visible={showBotsConfig}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowBotsConfig(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Play with Bots</Text>
+            <Text style={styles.modalSubtitle}>
+              Compete against 6 AI bots. You'll ask every 3rd question!
+            </Text>
+
+            <Text style={styles.modalLabel}>Number of Rounds</Text>
+            <View style={styles.roundOptionsContainer}>
+              {roundOptions.map((rounds) => (
+                <TouchableOpacity
+                  key={rounds}
+                  style={[
+                    styles.roundOption,
+                    selectedRounds === rounds && styles.roundOptionSelected,
+                  ]}
+                  onPress={() => setSelectedRounds(rounds)}
+                >
+                  <Text
+                    style={[
+                      styles.roundOptionText,
+                      selectedRounds === rounds && styles.roundOptionTextSelected,
+                    ]}
+                  >
+                    {rounds}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.roundBreakdown}>
+              You ask: {getUserAsksCount(selectedRounds)} | Bots ask: {getBotAsksCount(selectedRounds)}
+            </Text>
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowBotsConfig(false)}
+              >
+                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalStartButton}
+                onPress={handleStartBotsGame}
+              >
+                <Text style={styles.modalStartButtonText}>Start Game</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -223,5 +269,99 @@ const styles = StyleSheet.create({
   version: {
     fontSize: FontSizes.sm,
     color: Colors.textSecondary,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+  modalContent: {
+    backgroundColor: Colors.backgroundSecondary,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: FontWeights.bold,
+    color: Colors.text,
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+  },
+  modalSubtitle: {
+    fontSize: FontSizes.md,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+  },
+  modalLabel: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.sm,
+  },
+  roundOptionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.md,
+  },
+  roundOption: {
+    flex: 1,
+    marginHorizontal: 4,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  roundOptionSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(74, 144, 226, 0.1)',
+  },
+  roundOptionText: {
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.semibold,
+    color: Colors.textSecondary,
+  },
+  roundOptionTextSelected: {
+    color: Colors.primary,
+  },
+  roundBreakdown: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+  },
+  modalCancelButtonText: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semibold,
+    color: Colors.textSecondary,
+  },
+  modalStartButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+  },
+  modalStartButtonText: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semibold,
+    color: Colors.primaryForeground,
   },
 });

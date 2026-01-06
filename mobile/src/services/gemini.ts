@@ -1,5 +1,6 @@
 // Gemini API service for question validation
 import Constants from 'expo-constants';
+import { isYearAnswer } from '../utils/formatting';
 
 // Gemini API key from app.config.ts extra (populated via environment variables)
 const extra = Constants.expoConfig?.extra;
@@ -29,6 +30,14 @@ export interface UnitConversionResult {
 export interface SnarkyRemarkResult {
   success: boolean;
   remark?: string;
+  errorMessage?: string;
+}
+
+export interface TriviaQuestionResult {
+  success: boolean;
+  question?: string;
+  answer?: number;
+  units?: string;
   errorMessage?: string;
 }
 
@@ -250,8 +259,7 @@ export const generateSnarkyRemark = async (
 
   try {
     // Detect if this is a year/date question
-    const isYearQuestion = /\b(year|when|what date)\b/i.test(questionText) &&
-                           correctAnswer > 1000 && correctAnswer < 2100;
+    const isYearQuestion = isYearAnswer(questionText, correctAnswer);
 
     const errorPercent = Math.abs((worstGuess - correctAnswer) / correctAnswer) * 100;
     const yearDiff = Math.abs(worstGuess - correctAnswer);
@@ -352,6 +360,110 @@ ONLY respond with the JSON object, nothing else.`;
     return {
       success: false,
       errorMessage: 'Unable to generate snarky remark',
+    };
+  }
+};
+
+export const generateTriviaQuestion = async (
+  previousQuestions: string[] = []
+): Promise<TriviaQuestionResult> => {
+  if (!GEMINI_API_KEY) {
+    return {
+      success: false,
+      errorMessage: 'Trivia generation not available right now',
+    };
+  }
+
+  try {
+    const avoidList = previousQuestions.length > 0
+      ? `\n\nAVOID these topics (already asked):\n${previousQuestions.map(q => `- ${q}`).join('\n')}`
+      : '';
+
+    const prompt = `Generate a trivia question for a party estimation game. The question must have a specific, verifiable numeric answer.
+
+Good question types:
+- Population of cities/countries
+- Heights/lengths of landmarks or natural features
+- Distances between places
+- Counts of things (restaurants, countries, species, etc.)
+- Historical dates or durations
+- Sports statistics
+- Geographic facts
+- Scientific measurements
+
+Requirements:
+1. The answer must be a single number (not a range)
+2. The question should be fun and interesting
+3. Most people won't know the exact answer but can make educated guesses
+4. Avoid questions that are too obscure
+5. Include clear units in the answer${avoidList}
+
+Respond in JSON format:
+{
+  "question": "<the trivia question>",
+  "answer": <numeric answer>,
+  "units": "<unit of measurement like 'feet', 'people', 'miles', etc.>"
+}
+
+ONLY respond with the JSON object, nothing else.`;
+
+    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.9,
+          maxOutputTokens: 512,
+          responseMimeType: 'application/json',
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!generatedText) {
+      throw new Error('No response from Gemini API');
+    }
+
+    const jsonMatch = generatedText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('Invalid JSON response');
+    }
+
+    const parsedResponse = JSON.parse(jsonMatch[0]);
+
+    if (!parsedResponse.question || parsedResponse.answer === undefined) {
+      throw new Error('Invalid response format');
+    }
+
+    // Normalize units for year-type answers
+    let units = parsedResponse.units || 'units';
+    const answer = parsedResponse.answer;
+
+    // If answer looks like a year (4-digit number between 1000-2100) and units mention "year", use singular
+    if (answer >= 1000 && answer <= 2100 && /year/i.test(units)) {
+      units = 'year';
+    }
+
+    return {
+      success: true,
+      question: parsedResponse.question,
+      answer: answer,
+      units: units,
+    };
+  } catch (error) {
+    console.error('Error generating trivia question:', error);
+    return {
+      success: false,
+      errorMessage: 'Unable to generate trivia question',
     };
   }
 };

@@ -2,7 +2,7 @@ import React from 'react';
 import { TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { moveToStandings, advanceToNextRound, calculateAndSubmitResults, moveToBestWorst } from '../services/firebase';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
-import { DEMO_GAME_CODE, DEMO_ASKER, DEMO_PARTICIPANT } from '../services/demoData';
+import { DEMO_GAME_CODE, DEMO_ASKER, DEMO_PARTICIPANT, PLAY_WITH_BOTS } from '../services/demoData';
 import { Game } from '../types/game';
 
 interface DemoControlsProps {
@@ -12,7 +12,7 @@ interface DemoControlsProps {
 
 export default function DemoControls({ gameCode, game }: DemoControlsProps) {
   // Only show in demo modes
-  const isDemoMode = gameCode === DEMO_GAME_CODE || gameCode === DEMO_ASKER || gameCode === DEMO_PARTICIPANT;
+  const isDemoMode = gameCode === DEMO_GAME_CODE || gameCode === DEMO_ASKER || gameCode === DEMO_PARTICIPANT || gameCode === PLAY_WITH_BOTS;
   if (!isDemoMode || !game) {
     return null;
   }
@@ -25,6 +25,8 @@ export default function DemoControls({ gameCode, game }: DemoControlsProps) {
     demoModeLabel = 'Participant Demo';
   } else if (gameCode === DEMO_GAME_CODE) {
     demoModeLabel = 'Legacy Demo';
+  } else if (gameCode === PLAY_WITH_BOTS) {
+    demoModeLabel = 'Play with Bots';
   }
 
   const handleNextScreen = async () => {
@@ -73,8 +75,8 @@ export default function DemoControls({ gameCode, game }: DemoControlsProps) {
       onPress={handleNextScreen}
       activeOpacity={0.8}
     >
-      <Text style={styles.buttonLabel}>{demoModeLabel}</Text>
-      <Text style={styles.buttonText}>Next Screen →</Text>
+      <Text style={styles.buttonLabel}>(Demo Only)</Text>
+      <Text style={styles.buttonText}>Skip Screen {"-->"}</Text>
     </TouchableOpacity>
   );
 }
