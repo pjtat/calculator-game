@@ -3,7 +3,7 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 export default ({ config }: ConfigContext): ExpoConfig => ({
   name: "Calculator Game",
   slug: "calculator-game",
-  version: "1.0.0",
+  version: "1.0.2",
   orientation: "portrait",
   icon: "./assets/icon.png",
   userInterfaceStyle: "dark",
@@ -15,7 +15,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: "com.pjtat5.calculatorgame",
-    buildNumber: "1",
+    buildNumber: "2",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false
     }

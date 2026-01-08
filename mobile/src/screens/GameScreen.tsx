@@ -38,11 +38,7 @@ import { success, mediumTap } from '../utils/haptics';
 import { sanitizeUserInput } from '../utils/sanitize';
 import { formatDisplayNumber } from '../utils/formatting';
 import { isBot, BOT_PLAYERS } from '../services/demoEngine';
-import {
-  playTimer,
-  stopTimer,
-  stopBackgroundMusic,
-} from '../utils/sounds';
+import { stopBackgroundMusic } from '../utils/sounds';
 
 type GameScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Game'>;
@@ -87,20 +83,9 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
           navigation.replace('GameEnd', { gameCode, playerId });
         }
 
-        // Stop timer sound when entering results phase
-        if (updatedGame.status === 'results' && prevStatusRef.current !== 'results') {
-          stopTimer();
-        }
-
         // Stop music when leaving reveal phases
         if (updatedGame.status === 'question_entry' && prevStatusRef.current !== 'question_entry') {
           stopBackgroundMusic();
-        }
-
-        // Stop timer when all guesses are in
-        if (updatedGame.status === 'guessing' &&
-            shouldAutoCalculateResults(updatedGame)) {
-          stopTimer(); // Stop the countdown sound
         }
 
         // Auto-calculate results when all players have guessed (only asker should trigger)
@@ -786,13 +771,6 @@ function GuessingView({
   const totalGuessers = game ? Object.keys(game.players).length - 1 : 0;
   const submitted = Object.keys(guesses).length;
 
-  const handleTimerTick = (remaining: number) => {
-    // Play timer sound for entire countdown
-    if (remaining > 0) {
-      playTimer();
-    }
-  };
-
   return (
     <View style={styles.guessingContainer}>
       <Text style={styles.questionText}>{question}</Text>
@@ -803,7 +781,7 @@ function GuessingView({
       <View style={styles.divider} />
 
       <View style={styles.timerContainer}>
-        <Timer duration={duration} onExpire={onTimerExpire} onTick={handleTimerTick} />
+        <Timer duration={duration} onExpire={onTimerExpire} />
       </View>
 
       {hasSubmitted && (
@@ -840,13 +818,6 @@ function AskerWaitingView({ question, answer, duration, game, onTimerExpire }: a
   const submitted = Object.keys(guesses).length;
   const units = game.currentQuestion?.units;
 
-  const handleTimerTick = (remaining: number) => {
-    // Play timer sound for entire countdown
-    if (remaining > 0) {
-      playTimer();
-    }
-  };
-
   return (
     <View style={styles.phaseContainer}>
       <Text style={styles.questionText}>{question}</Text>
@@ -854,7 +825,7 @@ function AskerWaitingView({ question, answer, duration, game, onTimerExpire }: a
       <View style={styles.divider} />
 
       <View style={styles.timerContainer}>
-        <Timer duration={duration} onExpire={onTimerExpire} onTick={handleTimerTick} />
+        <Timer duration={duration} onExpire={onTimerExpire} />
       </View>
 
       <View style={styles.answerContainer}>

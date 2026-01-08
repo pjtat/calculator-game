@@ -13,7 +13,7 @@ import { Sound } from 'expo-av/build/Audio';
  * - button.mp3: Subtle click for calculator buttons (optional)
  */
 
-type SoundName = 'timer';
+type SoundName = never; // No sound effects currently in use
 
 // Background music
 let backgroundMusic: Sound | null = null;
@@ -27,12 +27,10 @@ const FADE_DURATION = 800; // Fade duration in milliseconds
 const FADE_STEPS = 20; // Number of steps in fade
 
 // Cache loaded sounds to avoid reloading
-const loadedSounds: Map<SoundName, Sound> = new Map();
+const loadedSounds: Map<string, Sound> = new Map();
 
-// Sound file mappings
-const soundFiles: Record<SoundName, any> = {
-  timer: require('../../assets/sounds/timer.mp3'),
-};
+// Sound file mappings (currently empty - timer.mp3 moved to unused folder)
+const soundFiles: Record<SoundName, any> = {};
 
 // Sound enabled state (can be toggled by user)
 let soundEnabled = true;
@@ -77,9 +75,7 @@ async function loadSound(name: SoundName): Promise<Sound | null> {
 }
 
 // Volume levels for different sounds
-const soundVolumes: Record<SoundName, number> = {
-  timer: 0.2, // 20% volume
-};
+const soundVolumes: Record<SoundName, number> = {};
 
 /**
  * Play a sound effect.
@@ -139,10 +135,6 @@ export async function stopSound(name: SoundName): Promise<void> {
     }
   }
 }
-
-// Convenience functions for specific sounds
-export const playTimer = () => playSound('timer');
-export const stopTimer = () => stopSound('timer');
 
 // ============================================
 // Background Music
