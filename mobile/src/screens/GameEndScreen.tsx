@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,15 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp } from '@react-navigation/native';
+import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { Colors, Spacing, BorderRadius, FontSizes, FontWeights, Shadows } from '../constants/theme';
 import { listenToGame } from '../services/firebase';
 import { Game, Player } from '../types/game';
 import Confetti from '../components/Confetti';
+import ToiletRain from '../components/ToiletRain';
 import AnimatedNumber from '../components/AnimatedNumber';
+import { playGameEndMusic, stopBackgroundMusic } from '../utils/sounds';
 
 type GameEndScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'GameEnd'>;
@@ -24,6 +26,17 @@ type GameEndScreenProps = {
 export default function GameEndScreen({ navigation, route }: GameEndScreenProps) {
   const { gameCode, playerId } = route.params;
   const [game, setGame] = useState<Game | null>(null);
+
+  // Play background music on game end screen
+  useFocusEffect(
+    useCallback(() => {
+      playGameEndMusic();
+
+      return () => {
+        stopBackgroundMusic();
+      };
+    }, [])
+  );
 
   useEffect(() => {
     const unsubscribe = listenToGame(gameCode, (updatedGame) => {
@@ -60,10 +73,19 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
   );
   const isCurrentPlayerWinner = winner?.id === playerId;
 
+  // Find all players tied for last place (but not if they're also the winner)
+  const lastPlaceScore = sortedPlayers[sortedPlayers.length - 1]?.score;
+  const losers = sortedPlayers.filter(
+    (p) => p.score === lastPlaceScore && p.id !== winner?.id
+  );
+  const isCurrentPlayerLoser = losers.some((l) => l.id === playerId);
+
   return (
     <View style={styles.container}>
       {/* Confetti for winner */}
       {isCurrentPlayerWinner && <Confetti count={60} duration={4000} />}
+      {/* Toilet rain for the loser - everyone sees it */}
+      {losers.length > 0 && <ToiletRain count={40} duration={4500} />}
 
       <ScrollView
         style={styles.content}
@@ -88,6 +110,23 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
             <Text style={styles.runnerUpText}>
               🥈 Runner-up{runnersUp.length > 1 ? 's' : ''}: {runnersUp.map(p => p.nickname).join(', ')} ({secondPlaceScore} points)
             </Text>
+          </View>
+        )}
+
+        {/* Last Place - Fun Shaming */}
+        {losers.length > 0 && (
+          <View style={styles.loserSection}>
+            <Text style={styles.loserLabel}>🚽 In the Toilet 🚽</Text>
+            <Text style={styles.loserName}>
+              {losers.map(p => p.nickname).join(', ')}
+            </Text>
+            <Text style={styles.loserSubtext}>Certified LOSER{losers.length > 1 ? 'S' : ''}</Text>
+            <AnimatedNumber
+              value={lastPlaceScore || 0}
+              style={styles.loserScore}
+              suffix=" points"
+              duration={800}
+            />
           </View>
         )}
 
@@ -119,6 +158,7 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
                 index === 0 && styles.standingFirst,
                 index === 1 && styles.standingSecond,
                 index === 2 && styles.standingThird,
+                losers.some(l => l.id === player.id) && styles.standingLast,
                 player.id === playerId && styles.standingCurrent,
               ]}
             >
@@ -145,6 +185,15 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
           <View style={styles.congratsSection}>
             <Text style={styles.congratsText}>
               🎉 Congratulations! You won! 🎉
+            </Text>
+          </View>
+        )}
+
+        {/* Shame Message for Last Place */}
+        {isCurrentPlayerLoser && (
+          <View style={styles.shameSection}>
+            <Text style={styles.shameText}>
+              💀 That's YOU. You're the loser. 💀
             </Text>
           </View>
         )}
@@ -189,6 +238,11 @@ const styles = StyleSheet.create({
   winnerSection: {
     alignItems: 'center',
     marginBottom: Spacing.xxl,
+    backgroundColor: '#22C55E20',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    borderWidth: 2,
+    borderColor: '#22C55E',
   },
   winnerLabel: {
     fontSize: 24,
@@ -210,6 +264,36 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   runnerUpText: {
+    fontSize: FontSizes.lg,
+    color: Colors.textSecondary,
+  },
+  loserSection: {
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+    backgroundColor: '#8B451320',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    borderWidth: 2,
+    borderColor: '#8B4513',
+  },
+  loserLabel: {
+    fontSize: 24,
+    marginBottom: Spacing.sm,
+    color: Colors.text,
+  },
+  loserName: {
+    fontSize: 36,
+    fontWeight: FontWeights.bold,
+    color: '#FF4444',
+    marginBottom: Spacing.xs,
+  },
+  loserSubtext: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.semibold,
+    color: '#FF4444',
+    marginBottom: Spacing.sm,
+  },
+  loserScore: {
     fontSize: FontSizes.lg,
     color: Colors.textSecondary,
   },
@@ -273,6 +357,10 @@ const styles = StyleSheet.create({
     borderColor: '#CD7F32',
     backgroundColor: '#CD7F3220',
   },
+  standingLast: {
+    borderColor: '#8B4513',
+    backgroundColor: '#8B451320',
+  },
   standingCurrent: {
     borderWidth: 2,
     borderColor: Colors.primary,
@@ -314,6 +402,16 @@ const styles = StyleSheet.create({
     fontSize: FontSizes.lg,
     fontWeight: FontWeights.bold,
     color: Colors.primary,
+    textAlign: 'center',
+  },
+  shameSection: {
+    alignItems: 'center',
+    paddingVertical: Spacing.lg,
+  },
+  shameText: {
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.bold,
+    color: '#FF4444',
     textAlign: 'center',
   },
   buttonsContainer: {

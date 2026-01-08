@@ -8,12 +8,12 @@
  */
 export function isYearAnswer(questionText: string, value: number): boolean {
   return /\b(year|when|what date)\b/i.test(questionText) &&
-         value > 1000 && value < 2100;
+         value >= 0 && value <= 4000;
 }
 
 /**
  * Format a number for display, handling special cases like years.
- * Years (1000-2100 when question contains "year"/"when"/"what date") are shown without commas.
+ * Years (0-4000 when question contains "year"/"when"/"what date") are shown without commas.
  * All other numbers use locale formatting with commas.
  *
  * @param value - The number to format

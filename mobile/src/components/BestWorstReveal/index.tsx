@@ -49,6 +49,12 @@ const FALLBACK_SNARKY_MESSAGES = [
   "Big swing and a miss! ⚾️💨",
   "That's... ambitious! 🎯❌",
   "Nice try though! 😬✨",
+  "Math is hard. 📐😅",
+  "That escalated quickly! 📈",
+  "The audacity! 👀✨",
+  "Confident and wrong - a classic combo! 💪",
+  "Points for creativity! 🎨😅",
+  "Someone was guessing with their heart 💕🙈",
 ];
 
 const getRandomFallbackSnark = (): string => {

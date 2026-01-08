@@ -16,6 +16,7 @@ import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '../consta
 import { listenToGame, startGame } from '../services/firebase';
 import { Game, Player } from '../types/game';
 import DemoControls from '../components/DemoControls';
+import { stopBackgroundMusic } from '../utils/sounds';
 
 type LobbyScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Lobby'>;
@@ -28,6 +29,9 @@ export default function LobbyScreen({ navigation, route }: LobbyScreenProps) {
   const [isStarting, setIsStarting] = useState(false);
 
   useEffect(() => {
+    // Stop background music when entering lobby (game is starting)
+    stopBackgroundMusic();
+
     // Listen to game updates
     const unsubscribe = listenToGame(gameCode, (updatedGame) => {
       if (updatedGame) {

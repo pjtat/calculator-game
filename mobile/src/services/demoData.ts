@@ -1,5 +1,5 @@
-import { Game } from '../types/game';
-import { DEMO_ASKER, DEMO_PARTICIPANT, DEMO_USER_ID, BOT_PLAYERS, PLAY_WITH_BOTS, generateAskerRotation } from './demoEngine';
+import { Game, BotDifficulty } from '../types/game';
+import { DEMO_ASKER, DEMO_PARTICIPANT, DEMO_USER_ID, BOT_PLAYERS, PLAY_WITH_BOTS } from './demoEngine';
 
 // Legacy demo mode (keep for existing tests)
 export const DEMO_GAME_CODE = 'DEMO01';
@@ -704,15 +704,16 @@ export const getDemoParticipantLobby = (): Game => {
 
 // ==================== Play with Bots Mode ====================
 
-// Play with Bots: Configurable rounds, user asks every 3rd question
-export const getPlayWithBotsLobby = (totalRounds: number = 9): Game => {
-  const askerRotation = generateAskerRotation(totalRounds);
-  const firstAsker = askerRotation[0];
-
+// Play with Bots: Configurable rounds and difficulty
+// User always starts as asker, then winner of each round asks next question
+export const getPlayWithBotsLobby = (
+  totalRounds: number = 9,
+  difficulty: BotDifficulty = 'medium'
+): Game => {
   return {
     status: 'waiting',
     currentRound: 0,
-    nextAsker: firstAsker,
+    nextAsker: DEMO_USER_ID,  // User ALWAYS starts as first asker
     players: createDemoPlayers(true),
     config: {
       hostId: DEMO_USER_ID,
@@ -725,8 +726,7 @@ export const getPlayWithBotsLobby = (totalRounds: number = 9): Game => {
     guesses: {},
     roundResults: {},
     currentQuestion: undefined,
-    askerRotation,
-    askerRotationIndex: 0,
+    botDifficulty: difficulty,
     isBotThinking: false,
   };
 };

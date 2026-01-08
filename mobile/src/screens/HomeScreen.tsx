@@ -1,10 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert, Modal } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import NumericRain from '../components/NumericRain';
 import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '../constants/theme';
 import { initPlayWithBots } from '../services/firebase';
+import { playBackgroundMusic } from '../utils/sounds';
+import { BotDifficulty, DIFFICULTY_CONFIGS } from '../services/demoEngine';
 
 type HomeScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -21,8 +24,20 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const tapTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showBotsConfig, setShowBotsConfig] = useState(false);
   const [selectedRounds, setSelectedRounds] = useState(9);
+  const [selectedDifficulty, setSelectedDifficulty] = useState<BotDifficulty>('medium');
 
   const roundOptions = [6, 9, 12, 15];
+  const difficultyOptions: BotDifficulty[] = ['easy', 'medium', 'hard'];
+
+  // Play background music when home screen is focused
+  // Music continues through Create Game, Join Game, and How to Play screens
+  // It stops when entering Lobby (game starts)
+  useFocusEffect(
+    useCallback(() => {
+      playBackgroundMusic();
+      // No cleanup - music persists until Lobby screen stops it
+    }, [])
+  );
 
   const handleVersionTap = () => {
     // Clear existing timeout
@@ -49,16 +64,13 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   };
 
   const handleStartBotsGame = () => {
-    initPlayWithBots(selectedRounds);
+    initPlayWithBots(selectedRounds, selectedDifficulty);
     setShowBotsConfig(false);
     navigation.navigate('Lobby', {
       gameCode: 'BOTPLAY',
       playerId: 'demo-user',
     });
   };
-
-  const getUserAsksCount = (rounds: number) => Math.floor(rounds / 3);
-  const getBotAsksCount = (rounds: number) => rounds - getUserAsksCount(rounds);
 
   return (
     <View style={styles.container}>
@@ -123,7 +135,33 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Play with Bots</Text>
             <Text style={styles.modalSubtitle}>
-              Compete against 6 AI bots. You'll ask every 3rd question!
+              Compete against 6 AI bots. Win rounds to ask questions!
+            </Text>
+
+            <Text style={styles.modalLabel}>Difficulty</Text>
+            <View style={styles.roundOptionsContainer}>
+              {difficultyOptions.map((diff) => (
+                <TouchableOpacity
+                  key={diff}
+                  style={[
+                    styles.difficultyOption,
+                    selectedDifficulty === diff && styles.roundOptionSelected,
+                  ]}
+                  onPress={() => setSelectedDifficulty(diff)}
+                >
+                  <Text
+                    style={[
+                      styles.roundOptionText,
+                      selectedDifficulty === diff && styles.roundOptionTextSelected,
+                    ]}
+                  >
+                    {DIFFICULTY_CONFIGS[diff].label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.difficultyDescription}>
+              {DIFFICULTY_CONFIGS[selectedDifficulty].description}
             </Text>
 
             <Text style={styles.modalLabel}>Number of Rounds</Text>
@@ -148,10 +186,6 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
                 </TouchableOpacity>
               ))}
             </View>
-
-            <Text style={styles.roundBreakdown}>
-              You ask: {getUserAsksCount(selectedRounds)} | Bots ask: {getBotAsksCount(selectedRounds)}
-            </Text>
 
             <View style={styles.modalButtonRow}>
               <TouchableOpacity
@@ -318,6 +352,23 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
+  difficultyOption: {
+    flex: 1,
+    marginHorizontal: 4,
+    paddingVertical: Spacing.md,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  difficultyDescription: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
+    fontStyle: 'italic',
+  },
   roundOptionSelected: {
     borderColor: Colors.primary,
     backgroundColor: 'rgba(74, 144, 226, 0.1)',
@@ -329,12 +380,6 @@ const styles = StyleSheet.create({
   },
   roundOptionTextSelected: {
     color: Colors.primary,
-  },
-  roundBreakdown: {
-    fontSize: FontSizes.sm,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: Spacing.xl,
   },
   modalButtonRow: {
     flexDirection: 'row',

@@ -137,10 +137,19 @@ ONLY respond with the JSON object, nothing else.`;
     }
 
     if (parsedResponse.isValid) {
+      // Normalize units for year-type answers
+      let units = parsedResponse.units || 'units';
+      const answer = parsedResponse.answer;
+
+      // If this is a year question, always use singular 'year' as units
+      if (isYearAnswer(question, answer)) {
+        units = 'year';
+      }
+
       return {
         isValid: true,
-        answer: parsedResponse.answer,
-        units: parsedResponse.units || 'units',
+        answer: answer,
+        units: units,
         reasoning: parsedResponse.reasoning,
       };
     } else {
@@ -244,6 +253,20 @@ ONLY respond with the JSON object, nothing else.`;
   }
 };
 
+// Humor styles for variety in snarky comments
+const COMMENT_STYLES = [
+  { name: 'comparison', instruction: 'Make a comparison to something absurd or unexpected' },
+  { name: 'rhetorical', instruction: 'Ask a rhetorical question about the guess' },
+  { name: 'historical', instruction: 'Reference what was actually happening at that time/number' },
+  { name: 'exaggeration', instruction: 'Use playful exaggeration about how off the guess was' },
+  { name: 'pop-culture', instruction: 'Make a pop culture, movie, or TV reference' },
+  { name: 'deadpan', instruction: 'Use dry, deadpan humor with a straight-faced delivery' },
+];
+
+const getRandomCommentStyle = () => {
+  return COMMENT_STYLES[Math.floor(Math.random() * COMMENT_STYLES.length)];
+};
+
 export const generateSnarkyRemark = async (
   questionText: string,
   correctAnswer: number,
@@ -284,6 +307,9 @@ export const generateSnarkyRemark = async (
 - If error is >100%: Full snark mode! Be hilariously sassy about how far off it was`;
     }
 
+    // Select a random humor style for this comment
+    const commentStyle = getRandomCommentStyle();
+
     const prompt = `You are a witty game show host commenting on a guess.
 
 Question: "${questionText}"
@@ -292,6 +318,8 @@ Worst Guess: ${worstGuess} ${units || ''}
 ${errorDescription}
 
 ${snarkGuidelines}
+
+STYLE FOR THIS COMMENT: ${commentStyle.instruction}
 
 Rules:
 - Make comparisons directly relevant to the question's subject matter
@@ -310,6 +338,12 @@ Examples (notice the variety in tone and style):
 - "Neil Armstrong wasn't even born yet! 👶🚀"
 - "Pretty close! Just a few bones short 🦴"
 - "Off by 500 years... just a few centuries! 📜💀"
+- "Did you think the pyramids were built yesterday? 🏛️"
+- "Interesting theory. Wildly incorrect, but interesting. 🤔"
+- "Even Doc Brown couldn't go that far back! 🚗⚡"
+- "Bold guess! Points for confidence! 💪😅"
+- "That's not a guess, that's a fever dream 🌡️💭"
+- "Were you thinking of a different planet? 🪐"
 
 Respond in JSON format:
 {
@@ -326,7 +360,7 @@ ONLY respond with the JSON object, nothing else.`;
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: 0.7,
+          temperature: 0.85,
           maxOutputTokens: 256,
           responseMimeType: 'application/json',
         },
@@ -447,9 +481,10 @@ ONLY respond with the JSON object, nothing else.`;
     // Normalize units for year-type answers
     let units = parsedResponse.units || 'units';
     const answer = parsedResponse.answer;
+    const question = parsedResponse.question;
 
-    // If answer looks like a year (4-digit number between 1000-2100) and units mention "year", use singular
-    if (answer >= 1000 && answer <= 2100 && /year/i.test(units)) {
+    // If this is a year question, always use singular 'year' as units
+    if (isYearAnswer(question, answer)) {
       units = 'year';
     }
 

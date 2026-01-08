@@ -13,20 +13,25 @@ import { Sound } from 'expo-av/build/Audio';
  * - button.mp3: Subtle click for calculator buttons (optional)
  */
 
-type SoundName = 'tick' | 'submit' | 'winner' | 'loser' | 'button' | 'countdown';
+type SoundName = 'timer';
+
+// Background music
+let backgroundMusic: Sound | null = null;
+let musicEnabled = true;
+let musicVolume = 0.3; // Default to 30% volume
+let currentTargetVolume = musicVolume; // Track target volume for fades
+let hasPlayedMusicBefore = false; // Track if this is initial app start
+const REVEAL_MUSIC_VOLUME = 0.12; // 12% volume for reveals
+const REVEAL_MUSIC_START_POSITION = 97000; // 1:37 in milliseconds
+const FADE_DURATION = 800; // Fade duration in milliseconds
+const FADE_STEPS = 20; // Number of steps in fade
 
 // Cache loaded sounds to avoid reloading
 const loadedSounds: Map<SoundName, Sound> = new Map();
 
-// Sound file mappings - update paths when adding sound files
-const soundFiles: Partial<Record<SoundName, any>> = {
-  // Uncomment and update paths when sound files are added:
-  // tick: require('../../assets/sounds/tick.mp3'),
-  // submit: require('../../assets/sounds/submit.mp3'),
-  // winner: require('../../assets/sounds/winner.mp3'),
-  // loser: require('../../assets/sounds/loser.mp3'),
-  // button: require('../../assets/sounds/button.mp3'),
-  // countdown: require('../../assets/sounds/countdown.mp3'),
+// Sound file mappings
+const soundFiles: Record<SoundName, any> = {
+  timer: require('../../assets/sounds/timer.mp3'),
 };
 
 // Sound enabled state (can be toggled by user)
@@ -71,6 +76,11 @@ async function loadSound(name: SoundName): Promise<Sound | null> {
   }
 }
 
+// Volume levels for different sounds
+const soundVolumes: Record<SoundName, number> = {
+  timer: 0.2, // 20% volume
+};
+
 /**
  * Play a sound effect.
  */
@@ -80,6 +90,7 @@ export async function playSound(name: SoundName): Promise<void> {
   const sound = await loadSound(name);
   if (sound) {
     try {
+      await sound.setVolumeAsync(soundVolumes[name] ?? 1.0);
       await sound.replayAsync();
     } catch (error) {
       console.warn(`Failed to play sound ${name}:`, error);
@@ -115,10 +126,222 @@ export async function unloadAllSounds(): Promise<void> {
   loadedSounds.clear();
 }
 
+/**
+ * Stop a specific sound effect.
+ */
+export async function stopSound(name: SoundName): Promise<void> {
+  const sound = loadedSounds.get(name);
+  if (sound) {
+    try {
+      await sound.stopAsync();
+    } catch (error) {
+      console.warn(`Failed to stop sound ${name}:`, error);
+    }
+  }
+}
+
 // Convenience functions for specific sounds
-export const playTick = () => playSound('tick');
-export const playSubmit = () => playSound('submit');
-export const playWinner = () => playSound('winner');
-export const playLoser = () => playSound('loser');
-export const playButton = () => playSound('button');
-export const playCountdown = () => playSound('countdown');
+export const playTimer = () => playSound('timer');
+export const stopTimer = () => stopSound('timer');
+
+// ============================================
+// Background Music
+// ============================================
+
+const backgroundMusicFile = require('../../assets/sounds/background-music.mp3');
+
+/**
+ * Fade volume from current level to target level.
+ */
+async function fadeVolume(targetVolume: number, duration: number = FADE_DURATION): Promise<void> {
+  if (!backgroundMusic) return;
+
+  try {
+    const status = await backgroundMusic.getStatusAsync();
+    if (!status.isLoaded) return;
+
+    const startVolume = status.volume;
+    const volumeDiff = targetVolume - startVolume;
+    const stepDuration = duration / FADE_STEPS;
+
+    for (let i = 1; i <= FADE_STEPS; i++) {
+      if (!backgroundMusic) return; // Music was stopped during fade
+      const newVolume = startVolume + (volumeDiff * (i / FADE_STEPS));
+      await backgroundMusic.setVolumeAsync(Math.max(0, Math.min(1, newVolume)));
+      await new Promise(resolve => setTimeout(resolve, stepDuration));
+    }
+  } catch (error) {
+    console.warn('Failed to fade volume:', error);
+  }
+}
+
+/**
+ * Start playing background music on loop.
+ * First play starts at full volume, subsequent plays fade in.
+ */
+export async function playBackgroundMusic(): Promise<void> {
+  if (!musicEnabled) return;
+
+  try {
+    // If music is already loaded, fade in and resume
+    if (backgroundMusic) {
+      const status = await backgroundMusic.getStatusAsync();
+      if (status.isLoaded && !status.isPlaying) {
+        await backgroundMusic.setVolumeAsync(0);
+        await backgroundMusic.playAsync();
+        await fadeVolume(currentTargetVolume);
+      }
+      return;
+    }
+
+    // First time playing: start at full volume (no fade)
+    // Subsequent plays: fade in
+    const isFirstPlay = !hasPlayedMusicBefore;
+    hasPlayedMusicBefore = true;
+
+    const { sound } = await Audio.Sound.createAsync(
+      backgroundMusicFile,
+      {
+        shouldPlay: true,
+        isLooping: true,
+        volume: isFirstPlay ? musicVolume : 0,
+      }
+    );
+    backgroundMusic = sound;
+    currentTargetVolume = musicVolume;
+
+    // Only fade in if not the first play
+    if (!isFirstPlay) {
+      await fadeVolume(musicVolume);
+    }
+  } catch (error) {
+    console.warn('Failed to play background music:', error);
+  }
+}
+
+/**
+ * Pause background music with fade out (can be resumed later).
+ */
+export async function pauseBackgroundMusic(): Promise<void> {
+  if (backgroundMusic) {
+    try {
+      await fadeVolume(0);
+      await backgroundMusic.pauseAsync();
+    } catch (error) {
+      console.warn('Failed to pause background music:', error);
+    }
+  }
+}
+
+/**
+ * Stop and unload background music with fade out.
+ */
+export async function stopBackgroundMusic(): Promise<void> {
+  if (backgroundMusic) {
+    try {
+      await fadeVolume(0);
+      await backgroundMusic.stopAsync();
+      await backgroundMusic.unloadAsync();
+      backgroundMusic = null;
+    } catch (error) {
+      console.warn('Failed to stop background music:', error);
+    }
+  }
+}
+
+/**
+ * Set background music volume (0 to 1).
+ */
+export async function setMusicVolume(volume: number): Promise<void> {
+  musicVolume = Math.max(0, Math.min(1, volume));
+  currentTargetVolume = musicVolume;
+  if (backgroundMusic) {
+    try {
+      await backgroundMusic.setVolumeAsync(musicVolume);
+    } catch (error) {
+      console.warn('Failed to set music volume:', error);
+    }
+  }
+}
+
+/**
+ * Enable or disable background music.
+ */
+export async function setMusicEnabled(enabled: boolean): Promise<void> {
+  musicEnabled = enabled;
+  if (!enabled) {
+    await stopBackgroundMusic();
+  }
+}
+
+/**
+ * Check if music is enabled.
+ */
+export function isMusicEnabled(): boolean {
+  return musicEnabled;
+}
+
+/**
+ * Play background music for reveal sequences (low volume, starting at 1:37) with fade in.
+ */
+export async function playRevealMusic(): Promise<void> {
+  if (!musicEnabled) return;
+
+  try {
+    // Fade out and stop any existing music first
+    if (backgroundMusic) {
+      await fadeVolume(0);
+      await backgroundMusic.stopAsync();
+      await backgroundMusic.unloadAsync();
+      backgroundMusic = null;
+    }
+
+    // Load at 0 volume for fade in, starting at 1:37
+    const { sound } = await Audio.Sound.createAsync(
+      backgroundMusicFile,
+      {
+        shouldPlay: true,
+        isLooping: true,
+        volume: 0,
+        positionMillis: REVEAL_MUSIC_START_POSITION,
+      }
+    );
+    backgroundMusic = sound;
+    currentTargetVolume = REVEAL_MUSIC_VOLUME;
+    await fadeVolume(REVEAL_MUSIC_VOLUME);
+  } catch (error) {
+    console.warn('Failed to play reveal music:', error);
+  }
+}
+
+/**
+ * Play background music for game end screen (normal volume, from start) with fade in.
+ */
+export async function playGameEndMusic(): Promise<void> {
+  if (!musicEnabled) return;
+
+  try {
+    // Fade out and stop any existing music first
+    if (backgroundMusic) {
+      await fadeVolume(0);
+      await backgroundMusic.stopAsync();
+      await backgroundMusic.unloadAsync();
+      backgroundMusic = null;
+    }
+
+    // Load at 0 volume for fade in
+    const { sound } = await Audio.Sound.createAsync(
+      backgroundMusicFile,
+      {
+        shouldPlay: true,
+        isLooping: true,
+        volume: 0,
+      }
+    );
+    backgroundMusic = sound;
+    currentTargetVolume = musicVolume;
+    await fadeVolume(musicVolume);
+  } catch (error) {
+    console.warn('Failed to play game end music:', error);
+  }
+}

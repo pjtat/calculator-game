@@ -6,20 +6,36 @@ export const DEMO_PARTICIPANT = 'DEMOPAR';
 export const DEMO_USER_ID = 'demo-user';
 export const PLAY_WITH_BOTS = 'BOTPLAY';
 
-// Bot player definitions
+// Difficulty levels for Play with Bots mode
+export type BotDifficulty = 'easy' | 'medium' | 'hard';
+
+export interface DifficultyConfig {
+  skillMultiplier: number;  // Scales bot error ranges (higher = worse bots)
+  label: string;
+  description: string;
+}
+
+export const DIFFICULTY_CONFIGS: Record<BotDifficulty, DifficultyConfig> = {
+  easy: { skillMultiplier: 1.5, label: 'Easy', description: 'Bots make more mistakes' },
+  medium: { skillMultiplier: 1.0, label: 'Medium', description: 'Balanced challenge' },
+  hard: { skillMultiplier: 0.6, label: 'Hard', description: 'Bots are sharper' },
+};
+
+// Bot player definitions with skill ranges for variability
 export interface BotPlayer {
   id: string;
   nickname: string;
-  offset: number; // Percentage offset from correct answer
+  minError: number;  // Minimum percentage error (best case)
+  maxError: number;  // Maximum percentage error (worst case)
 }
 
 export const BOT_PLAYERS: BotPlayer[] = [
-  { id: 'demo-bot-1', nickname: 'Ward', offset: 0.05 },      // +5% (very close)
-  { id: 'demo-bot-2', nickname: 'Porter', offset: -0.12 },   // -12% (good)
-  { id: 'demo-bot-3', nickname: 'Bettis', offset: 0.40 },    // +40% (medium)
-  { id: 'demo-bot-4', nickname: 'Polamalu', offset: -0.33 }, // -33% (medium)
-  { id: 'demo-bot-5', nickname: 'Hampton', offset: 0.85 },   // +85% (bad)
-  { id: 'demo-bot-6', nickname: 'Ike', offset: -0.60 },      // -60% (bad)
+  { id: 'demo-bot-1', nickname: 'Ward', minError: 0.00, maxError: 0.15 },      // 0-15% (skilled)
+  { id: 'demo-bot-2', nickname: 'Porter', minError: 0.05, maxError: 0.25 },    // 5-25% (good)
+  { id: 'demo-bot-3', nickname: 'Bettis', minError: 0.15, maxError: 0.50 },    // 15-50% (medium)
+  { id: 'demo-bot-4', nickname: 'Polamalu', minError: 0.10, maxError: 0.45 },  // 10-45% (medium)
+  { id: 'demo-bot-5', nickname: 'Hampton', minError: 0.40, maxError: 1.00 },   // 40-100% (weak)
+  { id: 'demo-bot-6', nickname: 'Ike', minError: 0.30, maxError: 0.80 },       // 30-80% (weak)
 ];
 
 // Pre-curated questions for participant mode
@@ -56,18 +72,58 @@ export const getRandomDemoQuestion = (): CurrentQuestion => {
   };
 };
 
-// Generate a bot guess based on correct answer and bot's offset
-export const generateBotGuess = (correctAnswer: number, bot: BotPlayer): number => {
-  const guess = correctAnswer * (1 + bot.offset);
+// Check if an answer is likely a year (1500-2100 range)
+const isLikelyYear = (answer: number): boolean => {
+  return answer >= 1500 && answer <= 2100 && Number.isInteger(answer);
+};
+
+// Generate a bot guess based on correct answer, bot's skill range, and difficulty
+export const generateBotGuess = (
+  correctAnswer: number,
+  bot: BotPlayer,
+  difficulty: BotDifficulty = 'medium'
+): number => {
+  const config = DIFFICULTY_CONFIGS[difficulty];
+
+  // Randomly decide if guess is over or under the correct answer
+  const direction = Math.random() < 0.5 ? 1 : -1;
+
+  // Special handling for year-based answers (use absolute error, not percentage)
+  if (isLikelyYear(correctAnswer)) {
+    // Map bot's percentage error range to absolute year error (max ~75 years for worst bots)
+    const minYearError = Math.round(bot.minError * 75 * config.skillMultiplier);
+    const maxYearError = Math.round(bot.maxError * 75 * config.skillMultiplier);
+    const yearError = minYearError + Math.random() * (maxYearError - minYearError);
+    const guess = Math.round(correctAnswer + direction * yearError);
+    return Math.max(1, guess);
+  }
+
+  // Apply difficulty multiplier to the bot's error range
+  const adjustedMinError = bot.minError * config.skillMultiplier;
+  const adjustedMaxError = bot.maxError * config.skillMultiplier;
+
+  // Generate random error percentage within the adjusted range
+  const errorPercent = adjustedMinError + Math.random() * (adjustedMaxError - adjustedMinError);
+
+  // Cap error at 90% when guessing low to keep guesses proportional to the answer
+  // This ensures guesses are always at least 10% of the correct answer
+  const cappedErrorPercent = direction === -1 ? Math.min(errorPercent, 0.9) : errorPercent;
+
+  // Calculate the guess with the random error
+  const guess = correctAnswer * (1 + direction * cappedErrorPercent);
+
+  // Ensure guess is positive (fallback safety, shouldn't trigger with capped error)
+  const positiveGuess = Math.max(1, guess);
+
   // Round to a reasonable precision
-  if (guess > 1000000) {
-    return Math.round(guess / 100000) * 100000; // Round to nearest 100k
-  } else if (guess > 10000) {
-    return Math.round(guess / 1000) * 1000; // Round to nearest 1k
-  } else if (guess > 100) {
-    return Math.round(guess / 10) * 10; // Round to nearest 10
+  if (positiveGuess > 1000000) {
+    return Math.round(positiveGuess / 100000) * 100000; // Round to nearest 100k
+  } else if (positiveGuess > 10000) {
+    return Math.round(positiveGuess / 1000) * 1000; // Round to nearest 1k
+  } else if (positiveGuess > 100) {
+    return Math.round(positiveGuess / 10) * 10; // Round to nearest 10
   } else {
-    return Math.round(guess);
+    return Math.round(positiveGuess);
   }
 };
 
@@ -85,55 +141,7 @@ export const generateBotCalculation = (guess: number): string => {
   }
 };
 
-// Schedule staggered bot submissions
-export const scheduleBotSubmissions = (
-  bots: BotPlayer[],
-  correctAnswer: number,
-  onBotSubmit: (botId: string, guess: number, calculation: string) => void,
-  baseDelay: number = 1000
-): void => {
-  bots.forEach((bot, index) => {
-    setTimeout(() => {
-      const guess = generateBotGuess(correctAnswer, bot);
-      const calculation = generateBotCalculation(guess);
-      onBotSubmit(bot.id, guess, calculation);
-    }, baseDelay + (index * 1500)); // Stagger by 1.5 seconds
-  });
-};
-
 // ==================== Play with Bots Mode ====================
-
-// Generate asker rotation for Play with Bots mode
-// Pattern: Bot1 -> Bot2 -> USER -> Bot3 -> Bot4 -> USER -> Bot5 -> Bot6 -> USER -> repeat
-export const generateAskerRotation = (totalRounds: number): string[] => {
-  const rotation: string[] = [];
-  let botIndex = 0;
-
-  for (let i = 0; i < totalRounds; i++) {
-    // Every 3rd question (index 2, 5, 8, ...) is the user's turn
-    if ((i + 1) % 3 === 0) {
-      rotation.push(DEMO_USER_ID);
-    } else {
-      // Use bots in order, cycling through them
-      rotation.push(BOT_PLAYERS[botIndex % BOT_PLAYERS.length].id);
-      botIndex++;
-    }
-  }
-
-  return rotation;
-};
-
-// Get the next asker from the rotation
-export const getNextAskerFromRotation = (
-  rotation: string[],
-  currentIndex: number
-): { nextAsker: string; nextIndex: number } => {
-  const nextIndex = (currentIndex + 1) % rotation.length;
-  return {
-    nextAsker: rotation[nextIndex],
-    nextIndex,
-  };
-};
 
 // Check if a player ID is a bot
 export const isBot = (playerId: string): boolean => {

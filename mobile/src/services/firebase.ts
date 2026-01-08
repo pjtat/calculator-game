@@ -5,7 +5,7 @@ import { getReactNativePersistence } from '@firebase/auth/dist/rn/index.js';
 import { getDatabase, ref, set, get, onValue, off, push, update, Database } from 'firebase/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import { Game, Player, Guess, CurrentQuestion, RoundResult, EmojiReaction } from '../types/game';
+import { Game, Player, Guess, CurrentQuestion, RoundResult, EmojiReaction, BotDifficulty } from '../types/game';
 import { generateSnarkyRemark } from './gemini';
 import {
   DEMO_GAME_CODE,
@@ -30,11 +30,8 @@ import {
   BOT_PLAYERS,
   generateBotGuess,
   generateBotCalculation,
-  scheduleBotSubmissions,
   getRandomDemoQuestion,
   isBot,
-  getNextAskerFromRotation,
-  generateAskerRotation,
 } from './demoEngine';
 import { generateTriviaQuestion } from './gemini';
 
@@ -276,7 +273,7 @@ export const startGame = async (gameCode: string): Promise<void> => {
 
     // If first asker is a bot, generate a question
     if (isBot(playWithBotsState.nextAsker)) {
-      handleBotAskQuestion();
+      await handleBotAskQuestion();
     }
     return;
   }
@@ -360,6 +357,7 @@ export const submitQuestion = async (
     updatePlayWithBots(playWithBotsState);
 
     // Then stagger bot guesses one by one
+    const difficulty = playWithBotsState.botDifficulty || 'medium';
     BOT_PLAYERS.forEach((bot, index) => {
       setTimeout(() => {
         // Safety check: make sure we're still on the same round
@@ -367,7 +365,7 @@ export const submitQuestion = async (
           return;
         }
 
-        const botGuess = generateBotGuess(answer, bot);
+        const botGuess = generateBotGuess(answer, bot, difficulty);
         const botCalculation = generateBotCalculation(botGuess);
 
         const currentGuesses = playWithBotsState.guesses[roundKey] || {};
@@ -477,6 +475,7 @@ export const submitGuess = async (
     updatePlayWithBots(playWithBotsState);
 
     // Then stagger bot guesses one by one
+    const difficulty = playWithBotsState.botDifficulty || 'medium';
     guessingBots.forEach((bot, index) => {
       setTimeout(() => {
         // Safety check: make sure we're still on the same round
@@ -484,7 +483,7 @@ export const submitGuess = async (
           return;
         }
 
-        const botGuess = generateBotGuess(correctAnswer, bot);
+        const botGuess = generateBotGuess(correctAnswer, bot, difficulty);
         const botCalculation = generateBotCalculation(botGuess);
 
         const currentGuesses = playWithBotsState.guesses[roundKey] || {};
@@ -654,14 +653,10 @@ export const calculateAndSubmitResults = async (
       // Update round results and status
       currentState.roundResults[`round_${roundNumber}`] = result;
 
-      // For Play with Bots, use rotation; for other demos, set user as next asker
-      if (gameCode === PLAY_WITH_BOTS && currentState.askerRotation && currentState.askerRotationIndex !== undefined) {
-        const { nextAsker, nextIndex } = getNextAskerFromRotation(
-          currentState.askerRotation,
-          currentState.askerRotationIndex
-        );
-        currentState.nextAsker = nextAsker;
-        currentState.askerRotationIndex = nextIndex;
+      // For Play with Bots, winner asks next; for other demos, set user as next asker
+      if (gameCode === PLAY_WITH_BOTS) {
+        // Winner of this round gets to ask the next question
+        currentState.nextAsker = winner;
       } else {
         currentState.nextAsker = DEMO_USER_ID;
       }
@@ -828,7 +823,7 @@ export const advanceToNextRound = async (gameCode: string): Promise<void> => {
 
         // If next asker is a bot, trigger bot question generation
         if (isBot(playWithBotsState.nextAsker)) {
-          handleBotAskQuestion();
+          await handleBotAskQuestion();
         }
       }
       return;
@@ -938,73 +933,86 @@ const updatePlayWithBots = (newState: Game) => {
 
 // Handle bot asking a question via Gemini
 const handleBotAskQuestion = async () => {
-  // Show "bot is thinking" state
-  playWithBotsState.isBotThinking = true;
-  updatePlayWithBots({ ...playWithBotsState });
+  try {
+    // Show "bot is thinking" state
+    playWithBotsState.isBotThinking = true;
+    updatePlayWithBots({ ...playWithBotsState });
 
-  // Wait a moment for UX
-  await new Promise(resolve => setTimeout(resolve, 1500));
+    // Wait a moment for UX
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
-  // Generate question via Gemini
-  const result = await generateTriviaQuestion(playWithBotsPreviousQuestions);
+    // Generate question via Gemini
+    const result = await generateTriviaQuestion(playWithBotsPreviousQuestions);
 
-  if (result.success && result.question && result.answer !== undefined) {
-    const question: CurrentQuestion = {
-      text: result.question,
-      answer: result.answer,
-      units: result.units,
-      askedBy: playWithBotsState.nextAsker,
-      submittedAt: Date.now(),
-    };
+    if (result.success && result.question && result.answer !== undefined) {
+      const question: CurrentQuestion = {
+        text: result.question,
+        answer: result.answer,
+        units: result.units,
+        askedBy: playWithBotsState.nextAsker,
+        submittedAt: Date.now(),
+      };
 
-    // Track question to avoid repeats
-    playWithBotsPreviousQuestions.push(result.question);
+      // Track question to avoid repeats
+      playWithBotsPreviousQuestions.push(result.question);
 
-    playWithBotsState = {
-      ...playWithBotsState,
-      currentQuestion: question,
-      status: 'guessing',
-      isBotThinking: false,
-      guesses: {
-        ...playWithBotsState.guesses,
-        [`round_${playWithBotsState.currentRound}`]: {},
-      },
-    };
-    updatePlayWithBots(playWithBotsState);
-  } else {
-    // Fallback to a default question if Gemini fails
-    const fallbackQuestions = [
-      { text: 'How many bones are in the human body?', answer: 206, units: 'bones' },
-      { text: 'How many countries are in the United Nations?', answer: 193, units: 'countries' },
-      { text: 'How tall is Mount Everest in feet?', answer: 29032, units: 'feet' },
-    ];
-    const fallback = fallbackQuestions[Math.floor(Math.random() * fallbackQuestions.length)];
-
-    const question: CurrentQuestion = {
-      text: fallback.text,
-      answer: fallback.answer,
-      units: fallback.units,
-      askedBy: playWithBotsState.nextAsker,
-      submittedAt: Date.now(),
-    };
-
-    playWithBotsState = {
-      ...playWithBotsState,
-      currentQuestion: question,
-      status: 'guessing',
-      isBotThinking: false,
-      guesses: {
-        ...playWithBotsState.guesses,
-        [`round_${playWithBotsState.currentRound}`]: {},
-      },
-    };
-    updatePlayWithBots(playWithBotsState);
+      playWithBotsState = {
+        ...playWithBotsState,
+        currentQuestion: question,
+        status: 'guessing',
+        isBotThinking: false,
+        guesses: {
+          ...playWithBotsState.guesses,
+          [`round_${playWithBotsState.currentRound}`]: {},
+        },
+      };
+      updatePlayWithBots(playWithBotsState);
+    } else {
+      // Fallback to a default question if Gemini fails
+      useFallbackQuestion();
+    }
+  } catch (error) {
+    console.error('Error generating bot question:', error);
+    // Use fallback question on error
+    useFallbackQuestion();
   }
 };
 
-// Initialize Play with Bots mode with custom round count
-export const initPlayWithBots = (totalRounds: number) => {
-  playWithBotsState = getPlayWithBotsLobby(totalRounds);
+// Helper function for fallback questions
+const useFallbackQuestion = () => {
+  const fallbackQuestions = [
+    { text: 'How many bones are in the human body?', answer: 206, units: 'bones' },
+    { text: 'How many countries are in the United Nations?', answer: 193, units: 'countries' },
+    { text: 'How tall is Mount Everest in feet?', answer: 29032, units: 'feet' },
+    { text: 'How many keys are on a standard piano?', answer: 88, units: 'keys' },
+    { text: 'How many stripes are on the American flag?', answer: 13, units: 'stripes' },
+  ];
+  const fallback = fallbackQuestions[Math.floor(Math.random() * fallbackQuestions.length)];
+
+  const question: CurrentQuestion = {
+    text: fallback.text,
+    answer: fallback.answer,
+    units: fallback.units,
+    askedBy: playWithBotsState.nextAsker,
+    submittedAt: Date.now(),
+  };
+
+  playWithBotsState = {
+    ...playWithBotsState,
+    currentQuestion: question,
+    status: 'guessing',
+    isBotThinking: false,
+    guesses: {
+      ...playWithBotsState.guesses,
+      [`round_${playWithBotsState.currentRound}`]: {},
+    },
+  };
+  updatePlayWithBots(playWithBotsState);
+};
+
+// Initialize Play with Bots mode with custom round count and difficulty
+export const initPlayWithBots = (totalRounds: number, difficulty: BotDifficulty = 'medium') => {
+  playWithBotsState = getPlayWithBotsLobby(totalRounds, difficulty);
   playWithBotsPreviousQuestions = [];
   updatePlayWithBots(playWithBotsState);
 };

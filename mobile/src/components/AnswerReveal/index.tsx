@@ -44,6 +44,15 @@ function formatCompact(value: number): string {
 function getDistanceColor(guess: number | null, correctAnswer: number): string {
   if (guess === null) return '#666666'; // Gray for no guess
 
+  // For near-zero correct answers, use absolute difference instead of percent
+  // This avoids division by zero and handles small values sensibly
+  if (Math.abs(correctAnswer) < 1) {
+    const absDiff = Math.abs(guess - correctAnswer);
+    if (absDiff <= 1) return '#4CAF50';    // Green - within 1
+    if (absDiff <= 5) return '#FF9800';    // Orange - within 5
+    return '#FF4444';                       // Red - far
+  }
+
   const percentError = Math.abs((guess - correctAnswer) / correctAnswer) * 100;
 
   if (percentError <= 10) return '#4CAF50'; // Green - close
@@ -150,22 +159,38 @@ export default function AnswerReveal({
     const minVal = Math.min(...allValues);
     const maxVal = Math.max(...allValues);
 
-    // Add padding (asymmetric: less on bottom, more on top)
-    const range = maxVal - minVal || 1;
-    const paddedMin = Math.max(0.1, minVal - range * 0.05);
-    const paddedMax = maxVal + range * 0.15;
+    // Calculate range, ensuring minimum visual spread
+    const rawRange = maxVal - minVal;
+    // Enforce minimum range: at least 10% of the answer magnitude, or 10 for very small answers
+    const minRange = Math.max(Math.abs(correctAnswer) * 0.1, 10);
+    const effectiveRange = Math.max(rawRange, minRange) || 1;
 
-    // Use log scale for large ranges
-    const useLogScale = paddedMax / paddedMin > 10;
+    // Calculate padded bounds
+    let paddedMin: number;
+    let paddedMax: number;
+
+    if (minVal <= 0) {
+      // For ranges with zero/negative: symmetric padding, no log scale
+      paddedMin = minVal - effectiveRange * 0.1;
+      paddedMax = maxVal + effectiveRange * 0.15;
+    } else {
+      // Original positive-only logic with minimum bound
+      paddedMin = Math.max(0.1, minVal - effectiveRange * 0.05);
+      paddedMax = maxVal + effectiveRange * 0.15;
+    }
+
+    // Only use log scale for positive ranges with >10x spread
+    const useLogScale = minVal > 0 && paddedMax / paddedMin > 10;
 
     const getPosition = (value: number): number => {
       let normalized: number;
       if (useLogScale) {
-        const logMin = Math.log10(Math.max(paddedMin, 0.1));
+        const logMin = Math.log10(paddedMin);
         const logMax = Math.log10(paddedMax);
-        const logVal = Math.log10(Math.max(value, 0.1));
+        const logVal = Math.log10(Math.max(value, paddedMin));
         normalized = (logVal - logMin) / (logMax - logMin);
       } else {
+        // Linear scale (works for all values including negative)
         normalized = (value - paddedMin) / (paddedMax - paddedMin);
       }
       // Invert so higher values are at top (lower Y position)
@@ -173,9 +198,26 @@ export default function AnswerReveal({
     };
 
     const correctDotPosition = getPosition(correctAnswer);
-    const guessDotPositions = actualGuessRankings.map(r =>
-      r.guess !== null ? getPosition(r.guess) : SCALE_HEIGHT / 2
-    );
+
+    // Calculate guess positions with jitter for identical values
+    const guessDotPositions = actualGuessRankings.map((r, index) => {
+      if (r.guess === null) return SCALE_HEIGHT / 2;
+
+      const basePosition = getPosition(r.guess);
+
+      // Check how many previous guesses have the same value
+      const duplicateIndex = actualGuessRankings
+        .slice(0, index)
+        .filter(other => other.guess === r.guess).length;
+
+      if (duplicateIndex > 0) {
+        // Offset by 8px per duplicate (alternating up/down)
+        const jitter = (duplicateIndex % 2 === 0 ? 1 : -1) * Math.ceil(duplicateIndex / 2) * 8;
+        return Math.max(10, Math.min(SCALE_HEIGHT - 10, basePosition + jitter));
+      }
+
+      return basePosition;
+    });
 
     // Calculate spaced label positions (correct answer stays fixed, guesses space around it)
     const spacedPositions = calculateSpacedPositions(guessDotPositions, correctDotPosition, SCALE_HEIGHT);
@@ -268,12 +310,26 @@ export default function AnswerReveal({
         ]).start();
       }, 800);
 
-      // Slot machine effect - spin numbers at readable speed within 200% of correct answer
+      // Slot machine effect - spin numbers at readable speed around correct answer
       setIsSlotMachineSpinning(true);
       const spinInterval = setInterval(() => {
-        // Generate random number within 50% to 200% of correct answer (reasonable range)
-        const minValue = Math.max(1, correctAnswer * 0.5);
-        const maxValue = correctAnswer * 2;
+        let minValue: number;
+        let maxValue: number;
+
+        if (correctAnswer === 0) {
+          // For zero: show range around zero
+          minValue = -10;
+          maxValue = 10;
+        } else if (correctAnswer < 0) {
+          // For negative: flip the multipliers (more negative to less negative)
+          minValue = correctAnswer * 2;  // More negative
+          maxValue = correctAnswer * 0.5; // Less negative
+        } else {
+          // Original positive logic
+          minValue = Math.max(1, correctAnswer * 0.5);
+          maxValue = correctAnswer * 2;
+        }
+
         const randomNum = minValue + Math.random() * (maxValue - minValue);
         setSlotMachineNumber(Math.round(randomNum));
       }, 150); // Slower for readability

@@ -56,6 +56,9 @@ export interface RoundResult {
   reactions?: { [reactionId: string]: EmojiReaction };
 }
 
+// Difficulty levels for Play with Bots mode
+export type BotDifficulty = 'easy' | 'medium' | 'hard';
+
 export interface Game {
   config: GameConfig;
   status: GameStatus;
@@ -66,8 +69,7 @@ export interface Game {
   roundResults: { [roundId: string]: RoundResult };
   nextAsker: string;
   // Play with Bots mode fields
-  askerRotation?: string[];  // Ordered list of player IDs for asking turns
-  askerRotationIndex?: number;  // Current index in the rotation
+  botDifficulty?: BotDifficulty;  // Difficulty level for bot guesses
   isBotThinking?: boolean;  // Whether a bot is currently "thinking" of a question
 }
 
