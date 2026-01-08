@@ -66,11 +66,6 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
     .sort((a, b) => b.score - a.score);
 
   const winner = sortedPlayers[0];
-  // Find all players tied for 2nd place
-  const secondPlaceScore = sortedPlayers[1]?.score;
-  const runnersUp = sortedPlayers.filter(
-    (p, idx) => idx > 0 && p.score === secondPlaceScore
-  );
   const isCurrentPlayerWinner = winner?.id === playerId;
 
   // Find all players tied for last place (but not if they're also the winner)
@@ -104,14 +99,6 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
           />
         </View>
 
-        {/* Runner Up(s) */}
-        {runnersUp.length > 0 && (
-          <View style={styles.runnerUpSection}>
-            <Text style={styles.runnerUpText}>
-              🥈 Runner-up{runnersUp.length > 1 ? 's' : ''}: {runnersUp.map(p => p.nickname).join(', ')} ({secondPlaceScore} points)
-            </Text>
-          </View>
-        )}
 
         {/* Last Place - Fun Shaming */}
         {losers.length > 0 && (
@@ -258,14 +245,6 @@ const styles = StyleSheet.create({
   winnerScore: {
     fontSize: FontSizes.xl,
     color: Colors.text,
-  },
-  runnerUpSection: {
-    alignItems: 'center',
-    marginBottom: Spacing.xl,
-  },
-  runnerUpText: {
-    fontSize: FontSizes.lg,
-    color: Colors.textSecondary,
   },
   loserSection: {
     alignItems: 'center',
