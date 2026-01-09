@@ -159,7 +159,7 @@ export const createGame = async (
         createdAt: Date.now(),
         hostId,
         // Scoring config with defaults
-        firstPlacePoints: scoringConfig?.firstPlacePoints ?? 3,
+        firstPlacePoints: scoringConfig?.firstPlacePoints ?? 4,
         secondPlacePoints: scoringConfig?.secondPlacePoints ?? 2,
         thirdPlacePoints: scoringConfig?.thirdPlacePoints ?? 1,
         lastPlacePoints: scoringConfig?.lastPlacePoints ?? 0,
@@ -602,7 +602,7 @@ export const calculateAndSubmitResults = async (
     const nonResponses = rankings.filter((r) => r.guess === null);
 
     // Get scoring config from game (with defaults for backward compatibility)
-    const firstPlacePoints = game.config.firstPlacePoints ?? 3;
+    const firstPlacePoints = game.config.firstPlacePoints ?? 4;
     const secondPlacePoints = game.config.secondPlacePoints ?? 2;
     const thirdPlacePoints = game.config.thirdPlacePoints ?? 1;
     const lastPlacePoints = game.config.lastPlacePoints ?? 0;

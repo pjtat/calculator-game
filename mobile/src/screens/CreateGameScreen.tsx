@@ -31,7 +31,7 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
 
   // Positional scoring configuration
   const [useCustomScoring, setUseCustomScoring] = useState(false);
-  const [firstPlacePoints, setFirstPlacePoints] = useState('3');
+  const [firstPlacePoints, setFirstPlacePoints] = useState('4');
   const [secondPlacePoints, setSecondPlacePoints] = useState('2');
   const [thirdPlacePoints, setThirdPlacePoints] = useState('1');
   const [lastPlacePoints, setLastPlacePoints] = useState('0');

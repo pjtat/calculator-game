@@ -12,7 +12,7 @@ export interface GameConfig {
   createdAt: number;      // timestamp
   hostId: string;
   // Positional scoring config (optional, defaults applied in scoring logic)
-  firstPlacePoints?: number;   // default: 3
+  firstPlacePoints?: number;   // default: 4
   secondPlacePoints?: number;  // default: 2
   thirdPlacePoints?: number;   // default: 1
   lastPlacePoints?: number;    // default: 0
