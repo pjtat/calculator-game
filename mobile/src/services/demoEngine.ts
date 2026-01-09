@@ -16,9 +16,9 @@ export interface DifficultyConfig {
 }
 
 export const DIFFICULTY_CONFIGS: Record<BotDifficulty, DifficultyConfig> = {
-  easy: { skillMultiplier: 1.5, label: 'Easy', description: 'Bots make more mistakes' },
-  medium: { skillMultiplier: 1.0, label: 'Medium', description: 'Balanced challenge' },
-  hard: { skillMultiplier: 0.6, label: 'Hard', description: 'Bots are sharper' },
+  easy: { skillMultiplier: 2.0, label: 'Easy', description: 'Bots make lots of mistakes' },
+  medium: { skillMultiplier: 1.3, label: 'Medium', description: 'Bots make some mistakes' },
+  hard: { skillMultiplier: 0.85, label: 'Hard', description: 'Bots are decent' },
 };
 
 // Bot player definitions with skill ranges for variability
@@ -30,12 +30,12 @@ export interface BotPlayer {
 }
 
 export const BOT_PLAYERS: BotPlayer[] = [
-  { id: 'demo-bot-1', nickname: 'Ward', minError: 0.00, maxError: 0.15 },      // 0-15% (skilled)
-  { id: 'demo-bot-2', nickname: 'Porter', minError: 0.05, maxError: 0.25 },    // 5-25% (good)
-  { id: 'demo-bot-3', nickname: 'Bettis', minError: 0.15, maxError: 0.50 },    // 15-50% (medium)
-  { id: 'demo-bot-4', nickname: 'Polamalu', minError: 0.10, maxError: 0.45 },  // 10-45% (medium)
-  { id: 'demo-bot-5', nickname: 'Hampton', minError: 0.40, maxError: 1.00 },   // 40-100% (weak)
-  { id: 'demo-bot-6', nickname: 'Ike', minError: 0.30, maxError: 0.80 },       // 30-80% (weak)
+  { id: 'demo-bot-1', nickname: 'Ward', minError: 0.10, maxError: 0.40 },      // 10-40% (skilled)
+  { id: 'demo-bot-2', nickname: 'Porter', minError: 0.15, maxError: 0.50 },    // 15-50% (good)
+  { id: 'demo-bot-3', nickname: 'Bettis', minError: 0.30, maxError: 0.80 },    // 30-80% (medium)
+  { id: 'demo-bot-4', nickname: 'Polamalu', minError: 0.25, maxError: 0.75 },  // 25-75% (medium)
+  { id: 'demo-bot-5', nickname: 'Hampton', minError: 0.40, maxError: 1.00 },   // 40-100% (below avg)
+  { id: 'demo-bot-6', nickname: 'Ike', minError: 0.35, maxError: 0.85 },       // 35-85% (below avg)
 ];
 
 // Pre-curated questions for participant mode
@@ -77,6 +77,13 @@ const isLikelyYear = (answer: number): boolean => {
   return answer >= 1500 && answer <= 2100 && Number.isInteger(answer);
 };
 
+// Generate a skewed random value between 0 and 1
+// Uses power distribution: smaller values are more likely than larger values
+// skewFactor > 1 means more clustering toward 0 (smaller errors more common)
+const skewedRandom = (skewFactor: number = 2): number => {
+  return Math.pow(Math.random(), skewFactor);
+};
+
 // Generate a bot guess based on correct answer, bot's skill range, and difficulty
 export const generateBotGuess = (
   correctAnswer: number,
@@ -88,12 +95,16 @@ export const generateBotGuess = (
   // Randomly decide if guess is over or under the correct answer
   const direction = Math.random() < 0.5 ? 1 : -1;
 
+  // Use skewed distribution: small errors are more likely, large errors are rare
+  // skewFactor of 2 means ~75% of guesses will be in the lower half of the error range
+  const skewFactor = 2;
+
   // Special handling for year-based answers (use absolute error, not percentage)
   if (isLikelyYear(correctAnswer)) {
     // Map bot's percentage error range to absolute year error (max ~75 years for worst bots)
     const minYearError = Math.round(bot.minError * 75 * config.skillMultiplier);
     const maxYearError = Math.round(bot.maxError * 75 * config.skillMultiplier);
-    const yearError = minYearError + Math.random() * (maxYearError - minYearError);
+    const yearError = minYearError + skewedRandom(skewFactor) * (maxYearError - minYearError);
     const guess = Math.round(correctAnswer + direction * yearError);
     return Math.max(1, guess);
   }
@@ -102,8 +113,8 @@ export const generateBotGuess = (
   const adjustedMinError = bot.minError * config.skillMultiplier;
   const adjustedMaxError = bot.maxError * config.skillMultiplier;
 
-  // Generate random error percentage within the adjusted range
-  const errorPercent = adjustedMinError + Math.random() * (adjustedMaxError - adjustedMinError);
+  // Generate random error percentage within the adjusted range (skewed toward smaller errors)
+  const errorPercent = adjustedMinError + skewedRandom(skewFactor) * (adjustedMaxError - adjustedMinError);
 
   // Cap error at 90% when guessing low to keep guesses proportional to the answer
   // This ensures guesses are always at least 10% of the correct answer

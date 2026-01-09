@@ -1,9 +1,10 @@
 import { ExpoConfig, ConfigContext } from 'expo/config';
+const { APP_VERSION } = require('../version.js');
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   name: "Calculator Game",
   slug: "calculator-game",
-  version: "1.0.2",
+  version: APP_VERSION,
   orientation: "portrait",
   icon: "./assets/icon.png",
   userInterfaceStyle: "dark",
@@ -15,7 +16,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: "com.pjtat5.calculatorgame",
-    buildNumber: "2",
+    buildNumber: "3",
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false
     }
@@ -36,6 +37,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     firebaseDatabaseUrl: process.env.FIREBASE_DATABASE_URL,
     firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
     geminiApiKey: process.env.GEMINI_API_KEY,
+    sentryDsn: process.env.SENTRY_DSN,
   },
   owner: "pjtat5"
 });

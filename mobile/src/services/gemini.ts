@@ -263,6 +263,26 @@ const COMMENT_STYLES = [
   { name: 'deadpan', instruction: 'Use dry, deadpan humor with a straight-faced delivery' },
 ];
 
+// Format styles that vary HOW the comment is delivered (not just what it says)
+const FORMAT_STYLES = [
+  { name: 'standard', instruction: 'Write a normal witty sentence with 1-2 emojis', weight: 40 },
+  { name: 'sarcasm', instruction: 'Use heavy sarcasm. Examples: "Oh sure, that makes total sense 🙄", "Wow, so close! (not)", "Yeah no that\'s definitely right 😏"', weight: 10 },
+  { name: 'all-caps-chaos', instruction: 'Write in ALL CAPS with chaotic energy. Short phrases like "EXCUSE ME??" or "SIR THIS IS A WENDY\'S" or "I CANNOT 💀"', weight: 10 },
+  { name: 'casual-buddy', instruction: 'Write like you\'re roasting a friend. Use "bud", "chief", "my guy", "bestie", etc. Example: "I don\'t know about that one, chief 😬"', weight: 15 },
+  { name: 'stunned-silence', instruction: 'Express being speechless. Like "..." or "I- ...what? 🫠" or "No thoughts. Just pain. 💀"', weight: 5 },
+  { name: 'internet-speak', instruction: 'Use internet/meme language. Things like "bestie no 😭", "the math ain\'t mathing", "sir/ma\'am please", "crying screaming throwing up"', weight: 20 },
+];
+
+const getRandomFormatStyle = () => {
+  const totalWeight = FORMAT_STYLES.reduce((sum, s) => sum + s.weight, 0);
+  let random = Math.random() * totalWeight;
+  for (const style of FORMAT_STYLES) {
+    random -= style.weight;
+    if (random <= 0) return style;
+  }
+  return FORMAT_STYLES[0];
+};
+
 const getRandomCommentStyle = () => {
   return COMMENT_STYLES[Math.floor(Math.random() * COMMENT_STYLES.length)];
 };
@@ -307,8 +327,9 @@ export const generateSnarkyRemark = async (
 - If error is >100%: Full snark mode! Be hilariously sassy about how far off it was`;
     }
 
-    // Select a random humor style for this comment
+    // Select random styles for this comment
     const commentStyle = getRandomCommentStyle();
+    const formatStyle = getRandomFormatStyle();
 
     const prompt = `You are a witty game show host commenting on a guess.
 
@@ -319,31 +340,28 @@ ${errorDescription}
 
 ${snarkGuidelines}
 
-STYLE FOR THIS COMMENT: ${commentStyle.instruction}
+HUMOR APPROACH: ${commentStyle.instruction}
+FORMAT STYLE: ${formatStyle.instruction}
 
 Rules:
-- Make comparisons directly relevant to the question's subject matter
-- For historical dates: reference what actually happened in the guessed year, or compare to well-known events
-- For quantities: relate to real facts about the subject being asked about
 - Keep it playful, never mean or hurtful
-- One sentence only (max 120 characters)
-- Be creative and varied with how you start - don't always use the same interjections
-- Include 1-2 relevant emojis
+- Max 120 characters
 - Don't mention the player's name
+- IMPORTANT: Follow the FORMAT STYLE strictly - it defines the structure of your response
 
-Examples (notice the variety in tone and style):
-- "Almost! The war was still going in 1780 ⚔️"
-- "So you think the Magna Carta is as old as the United States? 🇺🇸"
-- "That would put Everest in outer space! 🚀"
-- "Neil Armstrong wasn't even born yet! 👶🚀"
-- "Pretty close! Just a few bones short 🦴"
-- "Off by 500 years... just a few centuries! 📜💀"
-- "Did you think the pyramids were built yesterday? 🏛️"
-- "Interesting theory. Wildly incorrect, but interesting. 🤔"
-- "Even Doc Brown couldn't go that far back! 🚗⚡"
-- "Bold guess! Points for confidence! 💪😅"
-- "That's not a guess, that's a fever dream 🌡️💭"
-- "Were you thinking of a different planet? 🪐"
+Examples showing FORMAT variety:
+Standard: "That would put Everest in outer space! 🚀"
+Standard: "Even Doc Brown couldn't go that far back! 🚗⚡"
+Sarcasm: "Oh sure, that makes total sense 🙄"
+Sarcasm: "Wow, so close! ...not even a little bit 😏"
+All-caps: "EXCUSE ME?? 💀"
+All-caps: "I CANNOT WITH THIS GUESS 😭"
+Casual-buddy: "I don't know about that one, chief 😬"
+Casual-buddy: "My guy... no 🫠"
+Stunned: "I- ...what?"
+Stunned: "No thoughts. Just pain. 💀"
+Internet-speak: "bestie the math ain't mathing 😭"
+Internet-speak: "crying screaming throwing up rn"
 
 Respond in JSON format:
 {

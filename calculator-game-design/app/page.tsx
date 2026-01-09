@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { NumericRain } from "@/components/numeric-rain"
 import Link from "next/link"
+import { APP_VERSION } from "../../version.js"
 
 export default function HomePage() {
   return (
@@ -31,7 +32,7 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="absolute bottom-8 text-[#8B92A6] text-sm">v1.0.0</div>
+        <div className="absolute bottom-8 text-[#8B92A6] text-sm">v{APP_VERSION}</div>
       </div>
     </div>
   )

@@ -6,16 +6,19 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Share,
+  Alert,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { Colors, Spacing, BorderRadius, FontSizes, FontWeights, Shadows } from '../constants/theme';
 import { listenToGame } from '../services/firebase';
-import { Game, Player } from '../types/game';
+import { Game } from '../types/game';
 import Confetti from '../components/Confetti';
 import ToiletRain from '../components/ToiletRain';
 import AnimatedNumber from '../components/AnimatedNumber';
+import HallOfShame from '../components/HallOfShame';
 import { playGameEndMusic, stopBackgroundMusic } from '../utils/sounds';
 
 type GameEndScreenProps = {
@@ -75,6 +78,24 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
   );
   const isCurrentPlayerLoser = losers.some((l) => l.id === playerId);
 
+  const handleShareResults = async () => {
+    const standingsText = sortedPlayers
+      .map((p, i) => `${i + 1}. ${p.nickname}: ${p.score} pts`)
+      .join('\n');
+
+    const message = `🎮 Calculator Game Results!\n\n🏆 Winner: ${winner?.nickname} (${winner?.score} pts)\n${losers.length > 0 ? `🚽 Loser${losers.length > 1 ? 's' : ''}: ${losers.map(l => l.nickname).join(', ')}\n` : ''}\n📊 Final Standings:\n${standingsText}\n\nPlay Calculator Game!`;
+
+    try {
+      await Share.share({ message });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to share results');
+    }
+  };
+
+  const handlePlayAgain = () => {
+    navigation.navigate('CreateGame');
+  };
+
   return (
     <View style={styles.container}>
       {/* Confetti for winner */}
@@ -99,7 +120,6 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
           />
         </View>
 
-
         {/* Last Place - Fun Shaming */}
         {losers.length > 0 && (
           <View style={styles.loserSection}>
@@ -117,22 +137,31 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
           </View>
         )}
 
-        {/* Game Summary */}
-        <View style={styles.summarySection}>
-          <Text style={styles.summaryTitle}>Game Summary</Text>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Total Rounds:</Text>
-            <Text style={styles.summaryValue}>{game.currentRound}</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Game Mode:</Text>
-            <Text style={styles.summaryValue}>
-              {game.config.gameMode === 'rounds'
-                ? `${game.config.targetRounds} Rounds`
-                : `First to ${game.config.targetScore}`}
+        {/* Congratulations Message */}
+        {isCurrentPlayerWinner && (
+          <View style={styles.congratsSection}>
+            <Text style={styles.congratsText}>
+              🎉 Congratulations! You won! 🎉
             </Text>
           </View>
-        </View>
+        )}
+
+        {/* Shame Message for Last Place */}
+        {isCurrentPlayerLoser && (
+          <View style={styles.shameSection}>
+            <Text style={styles.shameText}>
+              💀 That's YOU. You're the loser. 💀
+            </Text>
+          </View>
+        )}
+
+        {/* Hall of Shame - Worst answers from the game */}
+        {game.roundResults && Object.keys(game.roundResults).length > 0 && (
+          <HallOfShame
+            roundResults={game.roundResults}
+            players={game.players}
+          />
+        )}
 
         {/* Final Standings */}
         <View style={styles.standingsSection}>
@@ -166,34 +195,30 @@ export default function GameEndScreen({ navigation, route }: GameEndScreenProps)
             </View>
           ))}
         </View>
-
-        {/* Congratulations Message */}
-        {isCurrentPlayerWinner && (
-          <View style={styles.congratsSection}>
-            <Text style={styles.congratsText}>
-              🎉 Congratulations! You won! 🎉
-            </Text>
-          </View>
-        )}
-
-        {/* Shame Message for Last Place */}
-        {isCurrentPlayerLoser && (
-          <View style={styles.shameSection}>
-            <Text style={styles.shameText}>
-              💀 That's YOU. You're the loser. 💀
-            </Text>
-          </View>
-        )}
       </ScrollView>
 
       {/* Action Buttons */}
       <View style={styles.buttonsContainer}>
         <TouchableOpacity
-          style={styles.homeButton}
-          onPress={() => navigation.navigate('Home')}
+          style={styles.playAgainButton}
+          onPress={handlePlayAgain}
         >
-          <Text style={styles.homeButtonText}>Back to Home</Text>
+          <Text style={styles.playAgainButtonText}>Play Again</Text>
         </TouchableOpacity>
+        <View style={styles.secondaryButtonsRow}>
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={handleShareResults}
+          >
+            <Text style={styles.shareButtonText}>Share Results</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.homeButton}
+            onPress={() => navigation.navigate('Home')}
+          >
+            <Text style={styles.homeButtonText}>Home</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -224,7 +249,7 @@ const styles = StyleSheet.create({
   },
   winnerSection: {
     alignItems: 'center',
-    marginBottom: Spacing.xxl,
+    marginBottom: Spacing.lg,
     backgroundColor: '#22C55E20',
     borderRadius: BorderRadius.md,
     padding: Spacing.lg,
@@ -275,35 +300,6 @@ const styles = StyleSheet.create({
   loserScore: {
     fontSize: FontSizes.lg,
     color: Colors.textSecondary,
-  },
-  summarySection: {
-    backgroundColor: Colors.backgroundSecondary,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  summaryTitle: {
-    fontSize: FontSizes.lg,
-    fontWeight: FontWeights.semibold,
-    color: Colors.text,
-    marginBottom: Spacing.md,
-  },
-  summaryItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-  },
-  summaryLabel: {
-    fontSize: FontSizes.md,
-    color: Colors.textSecondary,
-  },
-  summaryValue: {
-    fontSize: FontSizes.md,
-    fontWeight: FontWeights.medium,
-    color: Colors.text,
   },
   standingsSection: {
     marginBottom: Spacing.xl,
@@ -395,18 +391,50 @@ const styles = StyleSheet.create({
   },
   buttonsContainer: {
     padding: Spacing.lg,
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
-  homeButton: {
+  playAgainButton: {
     backgroundColor: Colors.primary,
     borderRadius: BorderRadius.full,
     paddingVertical: Spacing.md,
     alignItems: 'center',
     ...Shadows.md,
   },
-  homeButtonText: {
+  playAgainButtonText: {
     fontSize: FontSizes.lg,
     fontWeight: FontWeights.semibold,
     color: Colors.primaryForeground,
+  },
+  secondaryButtonsRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  shareButton: {
+    flex: 1,
+    backgroundColor: Colors.backgroundSecondary,
+    borderRadius: BorderRadius.full,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  shareButtonText: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.medium,
+    color: Colors.text,
+  },
+  homeButton: {
+    flex: 1,
+    backgroundColor: Colors.backgroundSecondary,
+    borderRadius: BorderRadius.full,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  homeButtonText: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.medium,
+    color: Colors.text,
   },
 });

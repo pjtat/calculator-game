@@ -8,6 +8,7 @@ import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '../consta
 import { initPlayWithBots } from '../services/firebase';
 import { playBackgroundMusic } from '../utils/sounds';
 import { BotDifficulty, DIFFICULTY_CONFIGS } from '../services/demoEngine';
+import { APP_VERSION } from '../../../version.js';
 
 type HomeScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -120,7 +121,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         style={styles.versionContainer}
       >
         <Text style={styles.version}>
-          v1.0.1 {tapCount > 0 && `(${tapCount}/3)`}
+          v{APP_VERSION} {tapCount > 0 && `(${tapCount}/3)`}
         </Text>
       </TouchableOpacity>
 
