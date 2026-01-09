@@ -661,6 +661,7 @@ export const calculateAndSubmitResults = async (
     let snarkyRemark: string | null = null;
     const worstRanking = rankings[rankings.length - 1];
     const worstGuess = worstRanking?.guess;
+    const worstPlayerName = worstRanking?.playerId ? game.players[worstRanking.playerId]?.nickname : undefined;
 
     if (worstGuess !== null && correctAnswer !== 0) {
       try {
@@ -668,7 +669,8 @@ export const calculateAndSubmitResults = async (
           game.currentQuestion?.text || '',
           correctAnswer,
           worstGuess,
-          game.currentQuestion?.units
+          game.currentQuestion?.units,
+          worstPlayerName
         );
         snarkyRemark = remarkResult.success ? remarkResult.remark || null : null;
       } catch (error) {

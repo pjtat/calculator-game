@@ -265,11 +265,11 @@ const COMMENT_STYLES = [
 
 // Format styles that vary HOW the comment is delivered (not just what it says)
 const FORMAT_STYLES = [
-  { name: 'standard', instruction: 'Write a normal witty sentence with 1-2 emojis', weight: 40 },
+  { name: 'standard', instruction: 'Write a normal witty sentence with 1-2 emojis', weight: 35 },
   { name: 'sarcasm', instruction: 'Use heavy sarcasm. Examples: "Oh sure, that makes total sense 🙄", "Wow, so close! (not)", "Yeah no that\'s definitely right 😏"', weight: 10 },
   { name: 'all-caps-chaos', instruction: 'Write in ALL CAPS with chaotic energy. Short phrases like "EXCUSE ME??" or "SIR THIS IS A WENDY\'S" or "I CANNOT 💀"', weight: 10 },
   { name: 'casual-buddy', instruction: 'Write like you\'re roasting a friend. Use "bud", "chief", "my guy", "bestie", etc. Example: "I don\'t know about that one, chief 😬"', weight: 15 },
-  { name: 'stunned-silence', instruction: 'Express being speechless. Like "..." or "I- ...what? 🫠" or "No thoughts. Just pain. 💀"', weight: 5 },
+  { name: 'roasting', instruction: 'Be more direct and critical but still playful. Question their judgment. Examples: "Did you just pick a random number?", "I\'ve seen dart throws more accurate", "Were you even trying? Serious question."', weight: 10 },
   { name: 'internet-speak', instruction: 'Use internet/meme language. Things like "bestie no 😭", "the math ain\'t mathing", "sir/ma\'am please", "crying screaming throwing up"', weight: 20 },
 ];
 
@@ -291,7 +291,8 @@ export const generateSnarkyRemark = async (
   questionText: string,
   correctAnswer: number,
   worstGuess: number,
-  units?: string
+  units?: string,
+  playerName?: string
 ): Promise<SnarkyRemarkResult> => {
   if (!GEMINI_API_KEY) {
     return {
@@ -331,11 +332,14 @@ export const generateSnarkyRemark = async (
     const commentStyle = getRandomCommentStyle();
     const formatStyle = getRandomFormatStyle();
 
+    const playerInfo = playerName ? `Player Name: ${playerName}` : 'Player Name: (not provided)';
+
     const prompt = `You are a witty game show host commenting on a guess.
 
 Question: "${questionText}"
 Correct Answer: ${correctAnswer} ${units || ''}
 Worst Guess: ${worstGuess} ${units || ''}
+${playerInfo}
 ${errorDescription}
 
 ${snarkGuidelines}
@@ -346,22 +350,23 @@ FORMAT STYLE: ${formatStyle.instruction}
 Rules:
 - Keep it playful, never mean or hurtful
 - Max 120 characters
-- Don't mention the player's name
+- ${playerName ? 'Sometimes use the player\'s name for extra impact (about 40% of the time). Examples: "Carol... what are you doing??", "Nice try, Mike 🙄"' : 'Don\'t use a player name since none was provided'}
 - IMPORTANT: Follow the FORMAT STYLE strictly - it defines the structure of your response
 
-Examples showing FORMAT variety:
+Examples showing FORMAT variety (sometimes with name, sometimes without):
 Standard: "That would put Everest in outer space! 🚀"
 Standard: "Even Doc Brown couldn't go that far back! 🚗⚡"
+Standard (with name): "Carol, honey... what? 😅"
 Sarcasm: "Oh sure, that makes total sense 🙄"
-Sarcasm: "Wow, so close! ...not even a little bit 😏"
+Sarcasm (with name): "Nice try, Mike. Real nice. 😏"
 All-caps: "EXCUSE ME?? 💀"
-All-caps: "I CANNOT WITH THIS GUESS 😭"
+All-caps (with name): "SARAH WHAT ARE YOU DOING 😭"
 Casual-buddy: "I don't know about that one, chief 😬"
-Casual-buddy: "My guy... no 🫠"
-Stunned: "I- ...what?"
-Stunned: "No thoughts. Just pain. 💀"
+Casual-buddy (with name): "Tom... buddy... no 🫠"
+Roasting: "Did you just throw a dart at a number board?"
+Roasting (with name): "Alex, were you even trying? Serious question."
 Internet-speak: "bestie the math ain't mathing 😭"
-Internet-speak: "crying screaming throwing up rn"
+Internet-speak (with name): "Rachel bestie I cannot with this 💀"
 
 Respond in JSON format:
 {
