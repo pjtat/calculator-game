@@ -32,8 +32,10 @@ import {
   generateBotCalculation,
   getRandomDemoQuestion,
   isBot,
+  getBotById,
 } from './demoEngine';
 import { generateTriviaQuestion } from './gemini';
+import { getRandomTiebreakerQuestion } from '../constants/tiebreakerQuestions';
 
 // Legacy demo mode state (keep for existing tests)
 let demoGameState: Game = getDemoGame('waiting');
@@ -566,11 +568,22 @@ export const calculateAndSubmitResults = async (
       };
     });
 
-    // Sort by percentage error (nulls at end)
+    // Sort by percentage error (nulls at end), then by absolute difference for ties
+    // This ensures only ONE player gets -1 when tied for last (the one furthest from correct)
     rankings.sort((a, b) => {
       if (a.percentageError === null) return 1;
       if (b.percentageError === null) return -1;
-      return a.percentageError - b.percentageError;
+
+      // Primary: percentage error (ascending - best first)
+      if (a.percentageError !== b.percentageError) {
+        return a.percentageError - b.percentageError;
+      }
+
+      // Secondary: absolute difference (ascending - closest first, furthest last)
+      // This breaks ties so the worst absolute guess gets -1
+      const aAbsDiff = Math.abs((a.guess ?? 0) - correctAnswer);
+      const bAbsDiff = Math.abs((b.guess ?? 0) - correctAnswer);
+      return aAbsDiff - bAbsDiff;
     });
 
     // Separate actual guesses from non-responses
@@ -633,6 +646,8 @@ export const calculateAndSubmitResults = async (
       correctAnswer,
       rankings,
       snarkyRemark,
+      questionText: game.currentQuestion?.text,
+      questionUnits: game.currentQuestion?.units,
     };
 
     // Update game state - handle demo modes
@@ -721,6 +736,301 @@ export const checkWinCondition = async (gameCode: string): Promise<boolean> => {
   }
 };
 
+// ==================== Check for Tied Winners ====================
+
+/**
+ * Returns the IDs of players tied for first place, or empty array if no tie
+ */
+export const getTiedWinners = async (gameCode: string): Promise<string[]> => {
+  try {
+    let game: Game;
+    if (gameCode === DEMO_ASKER) {
+      game = demoAskerState;
+    } else if (gameCode === DEMO_PARTICIPANT) {
+      game = demoParticipantState;
+    } else if (gameCode === DEMO_GAME_CODE) {
+      game = demoGameState;
+    } else if (gameCode === PLAY_WITH_BOTS) {
+      game = playWithBotsState;
+    } else {
+      const gameRef = ref(database, `games/${gameCode}`);
+      const snapshot = await get(gameRef);
+      game = snapshot.val() as Game;
+    }
+
+    const players = Object.entries(game.players);
+    if (players.length === 0) return [];
+
+    const maxScore = Math.max(...players.map(([, p]) => p.score));
+    const tiedPlayers = players
+      .filter(([, p]) => p.score === maxScore)
+      .map(([id]) => id);
+
+    // Only return tied players if there are multiple
+    return tiedPlayers.length > 1 ? tiedPlayers : [];
+  } catch (error) {
+    console.error('Error checking for tied winners:', error);
+    return [];
+  }
+};
+
+// ==================== Initiate Tiebreaker ====================
+
+export const initiateTiebreaker = async (
+  gameCode: string,
+  tiedPlayerIds: string[]
+): Promise<void> => {
+  try {
+    // Get a random tiebreaker question
+    const question = getRandomTiebreakerQuestion();
+    const tiebreakerQuestion: CurrentQuestion = {
+      text: question.text,
+      answer: question.answer,
+      units: question.units,
+      askedBy: 'system',
+      submittedAt: Date.now(),
+    };
+
+    // Handle demo modes
+    if (gameCode === DEMO_ASKER) {
+      demoAskerState.status = 'tiebreaker';
+      demoAskerState.tiebreakerPlayers = tiedPlayerIds;
+      demoAskerState.tiebreakerQuestion = tiebreakerQuestion;
+      demoAskerState.guesses[`tiebreaker`] = {};
+      updateDemoAsker({ ...demoAskerState });
+      return;
+    } else if (gameCode === DEMO_PARTICIPANT) {
+      demoParticipantState.status = 'tiebreaker';
+      demoParticipantState.tiebreakerPlayers = tiedPlayerIds;
+      demoParticipantState.tiebreakerQuestion = tiebreakerQuestion;
+      demoParticipantState.guesses[`tiebreaker`] = {};
+      updateDemoParticipant({ ...demoParticipantState });
+      return;
+    } else if (gameCode === DEMO_GAME_CODE) {
+      demoGameState.status = 'tiebreaker';
+      demoGameState.tiebreakerPlayers = tiedPlayerIds;
+      demoGameState.tiebreakerQuestion = tiebreakerQuestion;
+      demoGameState.guesses[`tiebreaker`] = {};
+      updateDemoGame({ ...demoGameState });
+      return;
+    } else if (gameCode === PLAY_WITH_BOTS) {
+      playWithBotsState.status = 'tiebreaker';
+      playWithBotsState.tiebreakerPlayers = tiedPlayerIds;
+      playWithBotsState.tiebreakerQuestion = tiebreakerQuestion;
+      playWithBotsState.guesses[`tiebreaker`] = {};
+      updatePlayWithBots({ ...playWithBotsState });
+
+      // Generate bot guesses for tied bots
+      const tiedBots = tiedPlayerIds.filter(isBot);
+      for (const botId of tiedBots) {
+        const bot = getBotById(botId);
+        if (bot) {
+          const botGuess = generateBotGuess(
+            question.answer,
+            bot,
+            playWithBotsState.botDifficulty || 'medium'
+          );
+          const botCalculation = generateBotCalculation(botGuess);
+          await submitTiebreakerGuess(gameCode, botId, botGuess, botCalculation);
+        }
+      }
+      return;
+    }
+
+    await update(ref(database, `games/${gameCode}`), {
+      status: 'tiebreaker',
+      tiebreakerPlayers: tiedPlayerIds,
+      tiebreakerQuestion: tiebreakerQuestion,
+      [`guesses/tiebreaker`]: {},
+    });
+  } catch (error) {
+    console.error('Error initiating tiebreaker:', error);
+    throw error;
+  }
+};
+
+// ==================== Submit Tiebreaker Guess ====================
+
+export const submitTiebreakerGuess = async (
+  gameCode: string,
+  playerId: string,
+  guess: number | null,
+  calculation: string
+): Promise<void> => {
+  try {
+    const guessData: Guess = {
+      value: guess,
+      calculation,
+      submittedAt: Date.now(),
+    };
+
+    // Handle demo modes
+    if (gameCode === DEMO_ASKER) {
+      demoAskerState.guesses[`tiebreaker`] = demoAskerState.guesses[`tiebreaker`] || {};
+      demoAskerState.guesses[`tiebreaker`][playerId] = guessData;
+      updateDemoAsker({ ...demoAskerState });
+      return;
+    } else if (gameCode === DEMO_PARTICIPANT) {
+      demoParticipantState.guesses[`tiebreaker`] = demoParticipantState.guesses[`tiebreaker`] || {};
+      demoParticipantState.guesses[`tiebreaker`][playerId] = guessData;
+      updateDemoParticipant({ ...demoParticipantState });
+      return;
+    } else if (gameCode === DEMO_GAME_CODE) {
+      demoGameState.guesses[`tiebreaker`] = demoGameState.guesses[`tiebreaker`] || {};
+      demoGameState.guesses[`tiebreaker`][playerId] = guessData;
+      updateDemoGame({ ...demoGameState });
+      return;
+    } else if (gameCode === PLAY_WITH_BOTS) {
+      playWithBotsState.guesses[`tiebreaker`] = playWithBotsState.guesses[`tiebreaker`] || {};
+      playWithBotsState.guesses[`tiebreaker`][playerId] = guessData;
+      updatePlayWithBots({ ...playWithBotsState });
+      return;
+    }
+
+    await update(ref(database, `games/${gameCode}/guesses/tiebreaker/${playerId}`), guessData);
+  } catch (error) {
+    console.error('Error submitting tiebreaker guess:', error);
+    throw error;
+  }
+};
+
+// ==================== Calculate Tiebreaker Results ====================
+
+export const calculateTiebreakerResults = async (gameCode: string): Promise<void> => {
+  try {
+    let game: Game;
+    if (gameCode === DEMO_ASKER) {
+      game = demoAskerState;
+    } else if (gameCode === DEMO_PARTICIPANT) {
+      game = demoParticipantState;
+    } else if (gameCode === DEMO_GAME_CODE) {
+      game = demoGameState;
+    } else if (gameCode === PLAY_WITH_BOTS) {
+      game = playWithBotsState;
+    } else {
+      const gameRef = ref(database, `games/${gameCode}`);
+      const snapshot = await get(gameRef);
+      game = snapshot.val() as Game;
+    }
+
+    const guesses = game.guesses[`tiebreaker`] || {};
+    const correctAnswer = game.tiebreakerQuestion?.answer || 0;
+    const tiedPlayerIds = game.tiebreakerPlayers || [];
+
+    // Calculate percentage errors for tied players only
+    const rankings = tiedPlayerIds.map((playerId) => {
+      const guess = guesses[playerId];
+      const guessValue = guess?.value ?? null;
+      let percentageError: number | null = null;
+      if (guessValue !== null) {
+        if (correctAnswer !== 0) {
+          percentageError = Math.abs((guessValue - correctAnswer) / correctAnswer) * 100;
+        } else {
+          percentageError = Math.abs(guessValue - correctAnswer);
+        }
+      }
+
+      return {
+        playerId,
+        guess: guessValue,
+        percentageError,
+        submittedAt: guess?.submittedAt || Infinity,
+        pointsAwarded: 0, // No points in tiebreaker
+      };
+    });
+
+    // Sort by percentage error, then by submission time for exact ties
+    rankings.sort((a, b) => {
+      if (a.percentageError === null) return 1;
+      if (b.percentageError === null) return -1;
+
+      // Primary: percentage error (ascending)
+      if (a.percentageError !== b.percentageError) {
+        return a.percentageError - b.percentageError;
+      }
+
+      // Secondary: submission time (earlier wins)
+      return a.submittedAt - b.submittedAt;
+    });
+
+    // Winner is the first in the sorted list (closest answer, or first submitted if tied)
+    const tiebreakerWinner = rankings[0]?.playerId || '';
+
+    // Create tiebreaker result (stored as a special round result)
+    const result: RoundResult = {
+      winner: tiebreakerWinner,
+      loser: rankings[rankings.length - 1]?.playerId || '', // For display only, no -1 penalty
+      correctAnswer,
+      rankings: rankings.map(r => ({
+        playerId: r.playerId,
+        guess: r.guess,
+        percentageError: r.percentageError,
+        pointsAwarded: 0, // NO -1 penalty in tiebreaker
+      })),
+      questionText: game.tiebreakerQuestion?.text,
+      questionUnits: game.tiebreakerQuestion?.units,
+    };
+
+    // Update game state
+    if (gameCode === DEMO_ASKER) {
+      demoAskerState.roundResults[`tiebreaker`] = result;
+      demoAskerState.status = 'tiebreaker_results';
+      updateDemoAsker({ ...demoAskerState });
+    } else if (gameCode === DEMO_PARTICIPANT) {
+      demoParticipantState.roundResults[`tiebreaker`] = result;
+      demoParticipantState.status = 'tiebreaker_results';
+      updateDemoParticipant({ ...demoParticipantState });
+    } else if (gameCode === DEMO_GAME_CODE) {
+      demoGameState.roundResults[`tiebreaker`] = result;
+      demoGameState.status = 'tiebreaker_results';
+      updateDemoGame({ ...demoGameState });
+    } else if (gameCode === PLAY_WITH_BOTS) {
+      playWithBotsState.roundResults[`tiebreaker`] = result;
+      playWithBotsState.status = 'tiebreaker_results';
+      updatePlayWithBots({ ...playWithBotsState });
+    } else {
+      await update(ref(database, `games/${gameCode}`), {
+        [`roundResults/tiebreaker`]: result,
+        status: 'tiebreaker_results',
+      });
+    }
+  } catch (error) {
+    console.error('Error calculating tiebreaker results:', error);
+    throw error;
+  }
+};
+
+// ==================== End Game After Tiebreaker ====================
+
+export const endGameAfterTiebreaker = async (gameCode: string): Promise<void> => {
+  try {
+    if (gameCode === DEMO_ASKER) {
+      demoAskerState.status = 'ended';
+      updateDemoAsker({ ...demoAskerState });
+      return;
+    } else if (gameCode === DEMO_PARTICIPANT) {
+      demoParticipantState.status = 'ended';
+      updateDemoParticipant({ ...demoParticipantState });
+      return;
+    } else if (gameCode === DEMO_GAME_CODE) {
+      demoGameState.status = 'ended';
+      updateDemoGame({ ...demoGameState });
+      return;
+    } else if (gameCode === PLAY_WITH_BOTS) {
+      playWithBotsState.status = 'ended';
+      updatePlayWithBots({ ...playWithBotsState });
+      return;
+    }
+
+    await update(ref(database, `games/${gameCode}`), {
+      status: 'ended',
+    });
+  } catch (error) {
+    console.error('Error ending game after tiebreaker:', error);
+    throw error;
+  }
+};
+
 // ==================== Move to Best/Worst Reveal ====================
 
 export const moveToBestWorst = async (gameCode: string): Promise<void> => {
@@ -801,8 +1111,14 @@ export const advanceToNextRound = async (gameCode: string): Promise<void> => {
     } else if (gameCode === DEMO_GAME_CODE) {
       const isGameOver = await checkWinCondition(gameCode);
       if (isGameOver) {
-        demoGameState.status = 'ended';
-        updateDemoGame({ ...demoGameState });
+        // Check for tied winners before ending
+        const tiedWinners = await getTiedWinners(gameCode);
+        if (tiedWinners.length > 1) {
+          await initiateTiebreaker(gameCode, tiedWinners);
+        } else {
+          demoGameState.status = 'ended';
+          updateDemoGame({ ...demoGameState });
+        }
       } else {
         demoGameState.status = 'question_entry';
         demoGameState.currentRound = demoGameState.currentRound + 1;
@@ -813,8 +1129,14 @@ export const advanceToNextRound = async (gameCode: string): Promise<void> => {
     } else if (gameCode === PLAY_WITH_BOTS) {
       const isGameOver = await checkWinCondition(gameCode);
       if (isGameOver) {
-        playWithBotsState.status = 'ended';
-        updatePlayWithBots({ ...playWithBotsState });
+        // Check for tied winners before ending
+        const tiedWinners = await getTiedWinners(gameCode);
+        if (tiedWinners.length > 1) {
+          await initiateTiebreaker(gameCode, tiedWinners);
+        } else {
+          playWithBotsState.status = 'ended';
+          updatePlayWithBots({ ...playWithBotsState });
+        }
       } else {
         playWithBotsState.status = 'question_entry';
         playWithBotsState.currentRound = playWithBotsState.currentRound + 1;
@@ -836,9 +1158,15 @@ export const advanceToNextRound = async (gameCode: string): Promise<void> => {
     const isGameOver = await checkWinCondition(gameCode);
 
     if (isGameOver) {
-      await update(ref(database, `games/${gameCode}`), {
-        status: 'ended',
-      });
+      // Check for tied winners before ending
+      const tiedWinners = await getTiedWinners(gameCode);
+      if (tiedWinners.length > 1) {
+        await initiateTiebreaker(gameCode, tiedWinners);
+      } else {
+        await update(ref(database, `games/${gameCode}`), {
+          status: 'ended',
+        });
+      }
     } else {
       await update(ref(database, `games/${gameCode}`), {
         status: 'question_entry',

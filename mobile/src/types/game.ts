@@ -2,7 +2,7 @@
 
 export type GameMode = 'rounds' | 'score';
 
-export type GameStatus = 'waiting' | 'question_entry' | 'guessing' | 'results' | 'best_worst_reveal' | 'standings' | 'ended';
+export type GameStatus = 'waiting' | 'question_entry' | 'guessing' | 'results' | 'best_worst_reveal' | 'standings' | 'tiebreaker' | 'tiebreaker_results' | 'ended';
 
 export interface GameConfig {
   gameMode: GameMode;
@@ -54,6 +54,8 @@ export interface RoundResult {
   rankings: RoundRanking[];
   snarkyRemark?: string | null;
   reactions?: { [reactionId: string]: EmojiReaction };
+  questionText?: string;
+  questionUnits?: string;
 }
 
 // Difficulty levels for Play with Bots mode
@@ -71,6 +73,9 @@ export interface Game {
   // Play with Bots mode fields
   botDifficulty?: BotDifficulty;  // Difficulty level for bot guesses
   isBotThinking?: boolean;  // Whether a bot is currently "thinking" of a question
+  // Tiebreaker fields
+  tiebreakerPlayers?: string[];  // Player IDs participating in tiebreaker
+  tiebreakerQuestion?: CurrentQuestion;  // The tiebreaker question
 }
 
 // Helper type for local player state

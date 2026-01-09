@@ -23,6 +23,9 @@ import {
   moveToBestWorst,
   moveToStandings,
   advanceToNextRound,
+  submitTiebreakerGuess,
+  calculateTiebreakerResults,
+  endGameAfterTiebreaker,
 } from '../services/firebase';
 import { getDatabase, ref, update } from 'firebase/database';
 import { validateQuestion, convertUnits } from '../services/gemini';
@@ -72,6 +75,12 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
   // Results state
   const [isCalculatingResults, setIsCalculatingResults] = useState(false);
 
+  // Tiebreaker state
+  const [tiebreakerGuessValue, setTiebreakerGuessValue] = useState<number | null>(null);
+  const [tiebreakerCalculation, setTiebreakerCalculation] = useState('');
+  const [hasSubmittedTiebreakerGuess, setHasSubmittedTiebreakerGuess] = useState(false);
+  const [isCalculatingTiebreakerResults, setIsCalculatingTiebreakerResults] = useState(false);
+
   useEffect(() => {
     const unsubscribe = listenToGame(gameCode, (updatedGame) => {
       if (updatedGame) {
@@ -105,6 +114,18 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
           setGuessCalculation('');
         }
 
+        // Reset tiebreaker state when entering tiebreaker
+        if (updatedGame.status === 'tiebreaker' && prevStatusRef.current !== 'tiebreaker') {
+          setHasSubmittedTiebreakerGuess(false);
+          setTiebreakerGuessValue(null);
+          setTiebreakerCalculation('');
+        }
+
+        // Auto-calculate tiebreaker results when all tied players have guessed
+        if (updatedGame.status === 'tiebreaker' && shouldAutoCalculateTiebreakerResults(updatedGame)) {
+          handleTiebreakerTimerExpire();
+        }
+
         // Update previous status
         prevStatusRef.current = updatedGame.status;
       }
@@ -122,6 +143,15 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     const guesserIds = playerIds.filter((id) => id !== g.currentQuestion?.askedBy);
 
     return guesserIds.every((id) => guesses[id] !== undefined);
+  };
+
+  const shouldAutoCalculateTiebreakerResults = (g: Game): boolean => {
+    if (!g.guesses || !g.tiebreakerPlayers) return false;
+    const guesses = g.guesses[`tiebreaker`];
+    if (!guesses) return false;
+
+    // Check if all tied players have submitted
+    return g.tiebreakerPlayers.every((id) => guesses[id] !== undefined);
   };
 
   // ========== Question Entry Functions ==========
@@ -379,6 +409,79 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
     }
   };
 
+  // ========== Tiebreaker Functions ==========
+
+  const handleTiebreakerCalculationChange = (value: number | null, calculation: string) => {
+    setTiebreakerGuessValue(value);
+    setTiebreakerCalculation(calculation);
+  };
+
+  const handleSubmitTiebreakerGuess = async () => {
+    if (tiebreakerGuessValue === null || hasSubmittedTiebreakerGuess) return;
+
+    try {
+      await submitTiebreakerGuess(gameCode, playerId, tiebreakerGuessValue, tiebreakerCalculation);
+      setHasSubmittedTiebreakerGuess(true);
+      success();
+    } catch (error) {
+      console.error('Error submitting tiebreaker guess:', error);
+      Alert.alert('Error', 'Failed to submit guess. Please try again.');
+    }
+  };
+
+  const handleTiebreakerTimerExpire = async () => {
+    if (!game) return;
+
+    // Only process if we're still in tiebreaker phase
+    if (game.status !== 'tiebreaker') return;
+
+    // Check if this player is a tiebreaker participant
+    const isParticipant = game.tiebreakerPlayers?.includes(playerId);
+    if (!isParticipant) return;
+
+    // Check if user already has a guess in the game state (more reliable than local state)
+    const tiebreakerGuesses = game.guesses?.['tiebreaker'];
+    const userAlreadyGuessed = tiebreakerGuesses && tiebreakerGuesses[playerId] !== undefined;
+
+    // If player hasn't submitted, submit their guess (or null if they didn't enter anything)
+    if (!hasSubmittedTiebreakerGuess && !userAlreadyGuessed) {
+      try {
+        // Submit whatever value they have (null if they timed out without entering)
+        await submitTiebreakerGuess(
+          gameCode,
+          playerId,
+          tiebreakerGuessValue, // null if timed out without guess
+          tiebreakerCalculation || ''
+        );
+        setHasSubmittedTiebreakerGuess(true);
+      } catch (error) {
+        console.error('Error auto-submitting tiebreaker guess:', error);
+      }
+    }
+
+    // Calculate results (only one player should do this)
+    const isPlayWithBots = gameCode === 'BOTPLAY';
+    if (!isCalculatingTiebreakerResults) {
+      setIsCalculatingTiebreakerResults(true);
+      try {
+        await calculateTiebreakerResults(gameCode);
+      } catch (error) {
+        console.error('Error calculating tiebreaker results:', error);
+      } finally {
+        setIsCalculatingTiebreakerResults(false);
+      }
+    }
+  };
+
+  const handleContinueFromTiebreakerResults = async () => {
+    try {
+      await endGameAfterTiebreaker(gameCode);
+    } catch (error) {
+      console.error('Error ending game after tiebreaker:', error);
+      Alert.alert('Error', 'Failed to end game. Please try again.');
+    }
+  };
+
   // ========== Render Functions ==========
 
   if (!game) {
@@ -505,6 +608,33 @@ export default function GameScreen({ navigation, route }: GameScreenProps) {
             playerId={playerId}
             onNextRound={handleNextRound}
             gameCode={gameCode}
+          />
+        )}
+
+        {game.status === 'tiebreaker' && game.tiebreakerQuestion && (
+          <TiebreakerView
+            question={game.tiebreakerQuestion.text}
+            units={game.tiebreakerQuestion.units}
+            tiebreakerPlayers={game.tiebreakerPlayers || []}
+            players={game.players}
+            currentPlayerId={playerId}
+            hasSubmitted={hasSubmittedTiebreakerGuess}
+            duration={game.config.timerDuration}
+            onCalculationChange={handleTiebreakerCalculationChange}
+            onSubmit={handleSubmitTiebreakerGuess}
+            onTimerExpire={handleTiebreakerTimerExpire}
+            game={game}
+          />
+        )}
+
+        {game.status === 'tiebreaker_results' && game.roundResults['tiebreaker'] && (
+          <TiebreakerResultsView
+            result={game.roundResults['tiebreaker']}
+            tiebreakerPlayers={game.tiebreakerPlayers || []}
+            players={game.players}
+            currentPlayerId={playerId}
+            onContinue={handleContinueFromTiebreakerResults}
+            canContinue={game.tiebreakerPlayers?.includes(playerId) || gameCode === 'BOTPLAY'}
           />
         )}
       </ScrollView>
@@ -1019,6 +1149,280 @@ function StandingsView({ game, playerId, onNextRound, gameCode }: any) {
     </View>
   );
 }
+
+// ========== Tiebreaker Components ==========
+
+function TiebreakerView({
+  question,
+  units,
+  tiebreakerPlayers,
+  players,
+  currentPlayerId,
+  hasSubmitted,
+  duration,
+  onCalculationChange,
+  onSubmit,
+  onTimerExpire,
+  game,
+}: any) {
+  const isParticipant = tiebreakerPlayers.includes(currentPlayerId);
+  const tiedPlayerNames = tiebreakerPlayers
+    .map((id: string) => players[id]?.nickname || 'Unknown')
+    .join(' vs ');
+
+  // Count how many tied players have submitted
+  const guesses = game.guesses?.['tiebreaker'] || {};
+  const submittedCount = tiebreakerPlayers.filter((id: string) => guesses[id] !== undefined).length;
+
+  if (!isParticipant) {
+    // Non-participants watch the tiebreaker
+    return (
+      <View style={styles.phaseContainer}>
+        <View style={tiebreakerStyles.banner}>
+          <Text style={tiebreakerStyles.bannerText}>TIEBREAKER!</Text>
+        </View>
+        <Text style={styles.phaseSubtitle}>{tiedPlayerNames}</Text>
+
+        <View style={styles.questionPreview}>
+          <Text style={styles.questionPreviewText}>{question}</Text>
+          {units && <Text style={styles.answerUnits}>({units})</Text>}
+        </View>
+
+        <View style={styles.waitingNextContainer}>
+          <Text style={styles.waitingNextText}>
+            Watching the tiebreaker... ({submittedCount}/{tiebreakerPlayers.length} submitted)
+          </Text>
+          <ActivityIndicator style={{ marginTop: 16 }} color={Colors.primary} />
+        </View>
+      </View>
+    );
+  }
+
+  // Participant view - can submit a guess
+  return (
+    <View style={[styles.phaseContainer, styles.guessingContainer]}>
+      <View style={tiebreakerStyles.banner}>
+        <Text style={tiebreakerStyles.bannerText}>TIEBREAKER!</Text>
+      </View>
+      <Text style={styles.phaseSubtitle}>Closest answer wins. No penalty for being furthest.</Text>
+
+      <View style={styles.questionPreview}>
+        <Text style={styles.questionPreviewText}>{question}</Text>
+        {units && <Text style={styles.answerUnits}>({units})</Text>}
+      </View>
+
+      <Timer duration={duration} onExpire={onTimerExpire} />
+
+      {hasSubmitted ? (
+        <View style={styles.waitingNextContainer}>
+          <Text style={styles.waitingNextText}>
+            Guess submitted! Waiting for others... ({submittedCount}/{tiebreakerPlayers.length})
+          </Text>
+          <ActivityIndicator style={{ marginTop: 16 }} color={Colors.primary} />
+        </View>
+      ) : (
+        <View style={styles.calculatorWrapper}>
+          <Calculator onCalculationChange={onCalculationChange} />
+          <TouchableOpacity style={styles.submitButton} onPress={onSubmit}>
+            <Text style={styles.submitButtonText}>Submit Tiebreaker Guess</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function TiebreakerResultsView({
+  result,
+  tiebreakerPlayers,
+  players,
+  currentPlayerId,
+  onContinue,
+  canContinue,
+}: any) {
+  const winnerId = result.winner;
+  const winnerName = players[winnerId]?.nickname || 'Unknown';
+  const isCurrentPlayerWinner = winnerId === currentPlayerId;
+
+  return (
+    <View style={styles.phaseContainer}>
+      <View style={tiebreakerStyles.banner}>
+        <Text style={tiebreakerStyles.bannerText}>TIEBREAKER RESULTS</Text>
+      </View>
+
+      <View style={styles.questionPreview}>
+        <Text style={styles.questionPreviewText}>{result.questionText}</Text>
+        {result.questionUnits && <Text style={styles.answerUnits}>({result.questionUnits})</Text>}
+      </View>
+
+      <View style={tiebreakerStyles.answerContainer}>
+        <Text style={tiebreakerStyles.answerLabel}>Correct Answer</Text>
+        <Text style={tiebreakerStyles.answerValue}>
+          {formatDisplayNumber(result.correctAnswer)}
+          {result.questionUnits ? ` ${result.questionUnits}` : ''}
+        </Text>
+      </View>
+
+      <View style={tiebreakerStyles.winnerSection}>
+        <Text style={tiebreakerStyles.winnerLabel}>Winner</Text>
+        <Text style={tiebreakerStyles.winnerName}>{winnerName}</Text>
+        {isCurrentPlayerWinner && (
+          <Text style={tiebreakerStyles.winnerYou}>That's YOU!</Text>
+        )}
+      </View>
+
+      <View style={tiebreakerStyles.rankingsList}>
+        {result.rankings.map((ranking: RoundRanking, index: number) => (
+          <View
+            key={ranking.playerId}
+            style={[
+              tiebreakerStyles.rankingItem,
+              index === 0 && tiebreakerStyles.rankingFirst,
+              ranking.playerId === currentPlayerId && tiebreakerStyles.rankingCurrent,
+            ]}
+          >
+            <Text style={tiebreakerStyles.rankingRank}>#{index + 1}</Text>
+            <View style={tiebreakerStyles.rankingInfo}>
+              <Text style={tiebreakerStyles.rankingName}>
+                {players[ranking.playerId]?.nickname || 'Unknown'}
+              </Text>
+              <Text style={tiebreakerStyles.rankingGuess}>
+                Guessed: {ranking.guess !== null ? formatDisplayNumber(ranking.guess) : 'No guess'}
+              </Text>
+            </View>
+            <Text style={tiebreakerStyles.rankingError}>
+              {ranking.percentageError !== null
+                ? `${ranking.percentageError.toFixed(1)}% off`
+                : '-'}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      <Text style={tiebreakerStyles.noPointsNote}>
+        No points awarded or deducted in tiebreaker
+      </Text>
+
+      {canContinue ? (
+        <TouchableOpacity style={styles.nextButton} onPress={onContinue}>
+          <Text style={styles.nextButtonText}>See Final Results</Text>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.waitingNextContainer}>
+          <Text style={styles.waitingNextText}>Waiting for winner to continue...</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const tiebreakerStyles = StyleSheet.create({
+  banner: {
+    backgroundColor: '#FFD700',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.lg,
+    alignItems: 'center',
+  },
+  bannerText: {
+    fontSize: 28,
+    fontWeight: FontWeights.bold,
+    color: '#000',
+  },
+  answerContainer: {
+    backgroundColor: Colors.backgroundSecondary,
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    marginVertical: Spacing.lg,
+  },
+  answerLabel: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.xs,
+  },
+  answerValue: {
+    fontSize: 32,
+    fontWeight: FontWeights.bold,
+    color: Colors.primary,
+  },
+  winnerSection: {
+    alignItems: 'center',
+    marginVertical: Spacing.lg,
+    padding: Spacing.lg,
+    backgroundColor: '#22C55E20',
+    borderRadius: BorderRadius.md,
+    borderWidth: 2,
+    borderColor: '#22C55E',
+  },
+  winnerLabel: {
+    fontSize: FontSizes.md,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.xs,
+  },
+  winnerName: {
+    fontSize: 36,
+    fontWeight: FontWeights.bold,
+    color: Colors.primary,
+  },
+  winnerYou: {
+    fontSize: FontSizes.lg,
+    color: '#22C55E',
+    marginTop: Spacing.sm,
+    fontWeight: FontWeights.semibold,
+  },
+  rankingsList: {
+    marginVertical: Spacing.md,
+  },
+  rankingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    backgroundColor: Colors.backgroundSecondary,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  rankingFirst: {
+    borderColor: '#FFD700',
+    backgroundColor: '#FFD70020',
+  },
+  rankingCurrent: {
+    borderWidth: 2,
+    borderColor: Colors.primary,
+  },
+  rankingRank: {
+    fontSize: FontSizes.lg,
+    fontWeight: FontWeights.bold,
+    color: Colors.textSecondary,
+    width: 40,
+  },
+  rankingInfo: {
+    flex: 1,
+  },
+  rankingName: {
+    fontSize: FontSizes.md,
+    fontWeight: FontWeights.medium,
+    color: Colors.text,
+  },
+  rankingGuess: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+  },
+  rankingError: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+  },
+  noPointsNote: {
+    textAlign: 'center',
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
+    marginVertical: Spacing.md,
+  },
+});
 
 // ========== Styles ==========
 
