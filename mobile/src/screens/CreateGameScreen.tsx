@@ -13,7 +13,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { Colors, Spacing, BorderRadius, FontSizes, FontWeights } from '../constants/theme';
 import { createGame, signInAnonymous } from '../services/firebase';
-import { FeatureFlags } from '../constants/featureFlags';
 import { sanitizeUserInput } from '../utils/sanitize';
 
 type CreateGameScreenProps = {
@@ -26,11 +25,16 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
   const [customRounds, setCustomRounds] = useState('');
   const [scoreOption, setScoreOption] = useState<'5' | '10' | 'custom'>('5');
   const [customScore, setCustomScore] = useState('');
-  const [closestScore, setClosestScore] = useState('1');
-  const [furthestScore, setFurthestScore] = useState('-1');
   const [timerOption, setTimerOption] = useState<'30' | '45' | 'custom'>('45');
   const [customTimer, setCustomTimer] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Positional scoring configuration
+  const [useCustomScoring, setUseCustomScoring] = useState(false);
+  const [firstPlacePoints, setFirstPlacePoints] = useState('3');
+  const [secondPlacePoints, setSecondPlacePoints] = useState('2');
+  const [thirdPlacePoints, setThirdPlacePoints] = useState('1');
+  const [lastPlacePoints, setLastPlacePoints] = useState('0');
 
   const handleCreateGame = async () => {
     // Sanitize and validate nickname
@@ -55,22 +59,6 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
       return;
     }
 
-    // Validate closest score (only if feature is enabled)
-    if (FeatureFlags.ENABLE_CUSTOM_SCORING) {
-      const closestScoreValue = parseInt(closestScore);
-      if (isNaN(closestScoreValue) || closestScoreValue < -99 || closestScoreValue > 99) {
-        Alert.alert('Invalid Closest Score', 'Please enter a valid closest score (-99 to 99).');
-        return;
-      }
-
-      // Validate furthest score
-      const furthestScoreValue = parseInt(furthestScore);
-      if (isNaN(furthestScoreValue) || furthestScoreValue < -99 || furthestScoreValue > 99) {
-        Alert.alert('Invalid Furthest Score', 'Please enter a valid furthest score (-99 to 99).');
-        return;
-      }
-    }
-
     // Validate timer duration
     const timerValue = timerOption === 'custom' ? parseInt(customTimer) : parseInt(timerOption);
     if (isNaN(timerValue) || timerValue < 10 || timerValue > 90) {
@@ -84,8 +72,22 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
       // Sign in anonymously first
       const playerId = await signInAnonymous();
 
-      // Create the game with rounds mode (both values are stored but rounds mode is used)
-      const gameCode = await createGame(playerId, sanitizedNickname, 'rounds', roundsValue, timerValue);
+      // Create the game with rounds mode and optional custom scoring
+      const gameCode = await createGame(
+        playerId,
+        sanitizedNickname,
+        'rounds',
+        roundsValue,
+        timerValue,
+        useCustomScoring
+          ? {
+              firstPlacePoints: parseInt(firstPlacePoints),
+              secondPlacePoints: parseInt(secondPlacePoints),
+              thirdPlacePoints: parseInt(thirdPlacePoints),
+              lastPlacePoints: parseInt(lastPlacePoints),
+            }
+          : undefined
+      );
 
       // Navigate to lobby
       navigation.replace('Lobby', { gameCode, playerId });
@@ -289,40 +291,147 @@ export default function CreateGameScreen({ navigation }: CreateGameScreenProps) 
         )}
       </View>
 
-      {/* Scoring Configuration - Hidden behind feature flag */}
-      {FeatureFlags.ENABLE_CUSTOM_SCORING && (
-        <View style={styles.section}>
-          <View style={styles.scoringRow}>
-            <View style={styles.scoringItem}>
-              <Text style={styles.label}>Closest Score</Text>
-              <TextInput
-                style={[styles.input, styles.smallInput]}
-                placeholder="1"
-                placeholderTextColor={Colors.textSecondary}
-                value={closestScore}
-                onChangeText={setClosestScore}
-                keyboardType="numeric"
-                maxLength={3}
-                textAlign="center"
-              />
+      {/* Scoring Selection */}
+      <View style={styles.section}>
+        <Text style={styles.label}>Scoring</Text>
+        <View style={styles.optionsContainer}>
+          <TouchableOpacity
+            style={[styles.optionButton, !useCustomScoring && styles.optionButtonActive]}
+            onPress={() => setUseCustomScoring(false)}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                !useCustomScoring && styles.optionButtonTextActive,
+              ]}
+            >
+              Default
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.optionButton, useCustomScoring && styles.optionButtonActive]}
+            onPress={() => setUseCustomScoring(true)}
+          >
+            <Text
+              style={[
+                styles.optionButtonText,
+                useCustomScoring && styles.optionButtonTextActive,
+              ]}
+            >
+              Custom
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Scoring Options - shown when custom scoring enabled */}
+        {useCustomScoring && (
+          <View style={styles.scoringOptions}>
+            {/* 1st Place Points */}
+            <View style={styles.scoringSection}>
+              <Text style={styles.label}>1st Place</Text>
+              <View style={styles.optionsContainer}>
+                {['1', '2', '3', '4', '5'].map((value) => (
+                  <TouchableOpacity
+                    key={value}
+                    style={[
+                      styles.optionButton,
+                      firstPlacePoints === value && styles.optionButtonActive,
+                    ]}
+                    onPress={() => setFirstPlacePoints(value)}
+                  >
+                    <Text
+                      style={[
+                        styles.optionButtonText,
+                        firstPlacePoints === value && styles.optionButtonTextActive,
+                      ]}
+                    >
+                      {value}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
-            <View style={styles.scoringItem}>
-              <Text style={styles.label}>Furthest Score</Text>
-              <TextInput
-                style={[styles.input, styles.smallInput]}
-                placeholder="-1"
-                placeholderTextColor={Colors.textSecondary}
-                value={furthestScore}
-                onChangeText={setFurthestScore}
-                keyboardType="numeric"
-                maxLength={3}
-                textAlign="center"
-              />
+            {/* 2nd Place Points */}
+            <View style={styles.scoringSection}>
+              <Text style={styles.label}>2nd Place</Text>
+              <View style={styles.optionsContainer}>
+                {['0', '1', '2', '3'].map((value) => (
+                  <TouchableOpacity
+                    key={value}
+                    style={[
+                      styles.optionButton,
+                      secondPlacePoints === value && styles.optionButtonActive,
+                    ]}
+                    onPress={() => setSecondPlacePoints(value)}
+                  >
+                    <Text
+                      style={[
+                        styles.optionButtonText,
+                        secondPlacePoints === value && styles.optionButtonTextActive,
+                      ]}
+                    >
+                      {value}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* 3rd Place Points */}
+            <View style={styles.scoringSection}>
+              <Text style={styles.label}>3rd Place</Text>
+              <View style={styles.optionsContainer}>
+                {['0', '1', '2'].map((value) => (
+                  <TouchableOpacity
+                    key={value}
+                    style={[
+                      styles.optionButton,
+                      thirdPlacePoints === value && styles.optionButtonActive,
+                    ]}
+                    onPress={() => setThirdPlacePoints(value)}
+                  >
+                    <Text
+                      style={[
+                        styles.optionButtonText,
+                        thirdPlacePoints === value && styles.optionButtonTextActive,
+                      ]}
+                    >
+                      {value}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Last Place Points */}
+            <View style={styles.scoringSection}>
+              <Text style={styles.label}>Last Place</Text>
+              <View style={styles.optionsContainer}>
+                {['-1', '0'].map((value) => (
+                  <TouchableOpacity
+                    key={value}
+                    style={[
+                      styles.optionButton,
+                      lastPlacePoints === value && styles.optionButtonActive,
+                    ]}
+                    onPress={() => setLastPlacePoints(value)}
+                  >
+                    <Text
+                      style={[
+                        styles.optionButtonText,
+                        lastPlacePoints === value && styles.optionButtonTextActive,
+                      ]}
+                    >
+                      {value}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           </View>
-        </View>
-      )}
+        )}
+      </View>
 
       {/* Create Button */}
       <TouchableOpacity
@@ -393,16 +502,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.sm,
   },
-  scoringRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
+  scoringOptions: {
+    marginTop: Spacing.md,
   },
-  scoringItem: {
-    flex: 1,
-  },
-  smallInput: {
-    width: '100%',
-    textAlign: 'center',
+  scoringSection: {
+    marginBottom: Spacing.md,
   },
   optionButton: {
     flex: 1,

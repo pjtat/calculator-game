@@ -11,6 +11,11 @@ export interface GameConfig {
   timerDuration: number;  // seconds
   createdAt: number;      // timestamp
   hostId: string;
+  // Positional scoring config (optional, defaults applied in scoring logic)
+  firstPlacePoints?: number;   // default: 3
+  secondPlacePoints?: number;  // default: 2
+  thirdPlacePoints?: number;   // default: 1
+  lastPlacePoints?: number;    // default: 0
 }
 
 export interface Player {
@@ -38,7 +43,7 @@ export interface RoundRanking {
   playerId: string;
   guess: number | null;
   percentageError: number | null;
-  pointsAwarded: number;  // +1, 0, or -1
+  pointsAwarded: number;  // based on position (1st/2nd/3rd/last/middle)
 }
 
 export interface EmojiReaction {

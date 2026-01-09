@@ -126,7 +126,13 @@ export const createGame = async (
   hostNickname: string,
   gameMode: 'rounds' | 'score',
   targetValue: number,
-  timerDuration: number = 45
+  timerDuration: number = 45,
+  scoringConfig?: {
+    firstPlacePoints: number;
+    secondPlacePoints: number;
+    thirdPlacePoints: number;
+    lastPlacePoints: number;
+  }
 ): Promise<string> => {
   try {
     // Generate unique game code
@@ -152,6 +158,11 @@ export const createGame = async (
         timerDuration,
         createdAt: Date.now(),
         hostId,
+        // Scoring config with defaults
+        firstPlacePoints: scoringConfig?.firstPlacePoints ?? 3,
+        secondPlacePoints: scoringConfig?.secondPlacePoints ?? 2,
+        thirdPlacePoints: scoringConfig?.thirdPlacePoints ?? 1,
+        lastPlacePoints: scoringConfig?.lastPlacePoints ?? 0,
       },
       status: 'waiting',
       currentRound: 0,
@@ -590,23 +601,50 @@ export const calculateAndSubmitResults = async (
     const actualGuesses = rankings.filter((r) => r.guess !== null);
     const nonResponses = rankings.filter((r) => r.guess === null);
 
-    // Award points based on whether anyone actually answered
-    if (actualGuesses.length > 0) {
-      // Best guess gets +1
-      actualGuesses[0].pointsAwarded = 1;
+    // Get scoring config from game (with defaults for backward compatibility)
+    const firstPlacePoints = game.config.firstPlacePoints ?? 3;
+    const secondPlacePoints = game.config.secondPlacePoints ?? 2;
+    const thirdPlacePoints = game.config.thirdPlacePoints ?? 1;
+    const lastPlacePoints = game.config.lastPlacePoints ?? 0;
 
-      // Worst guess penalty logic:
-      // - If anyone didn't submit (timeout): they get -1, worst guesser gets 0
-      // - If everyone submitted: worst guesser gets -1
-      if (nonResponses.length === 0 && actualGuesses.length > 1) {
-        // Everyone submitted - worst guesser gets -1
-        actualGuesses[actualGuesses.length - 1].pointsAwarded = -1;
+    // Award positional points based on position
+    // Scoring rules:
+    // - 2 players: 1st gets firstPlacePoints, 2nd gets lastPlacePoints
+    // - 3 players: 1st, 2nd, 3rd get their respective points (no separate "last")
+    // - 4+ players: 1st, 2nd, 3rd get points, middle gets 0, last gets lastPlacePoints
+    // - Non-responders are always treated as last place
+
+    const totalPlayers = actualGuesses.length + nonResponses.length;
+
+    actualGuesses.forEach((ranking, position) => {
+      // Determine if this position is "last" overall (considering timeouts)
+      const isActualLast = nonResponses.length === 0 && position === totalPlayers - 1;
+      const shouldGetLastPoints = isActualLast && totalPlayers >= 4;
+
+      if (position === 0) {
+        // 1st place always gets first place points
+        ranking.pointsAwarded = firstPlacePoints;
+      } else if (totalPlayers === 2) {
+        // 2 players: 2nd place is "last"
+        ranking.pointsAwarded = lastPlacePoints;
+      } else if (position === 1) {
+        // 2nd place (3+ players)
+        ranking.pointsAwarded = secondPlacePoints;
+      } else if (position === 2 && !shouldGetLastPoints) {
+        // 3rd place (not last, or 3 players where 3rd is last)
+        ranking.pointsAwarded = thirdPlacePoints;
+      } else if (shouldGetLastPoints) {
+        // Last place in 4+ player games
+        ranking.pointsAwarded = lastPlacePoints;
+      } else {
+        // Middle players (4th through second-to-last) get 0
+        ranking.pointsAwarded = 0;
       }
-    }
+    });
 
-    // All non-responders get -1 penalty
+    // All non-responders get last place points (they're always at the end)
     nonResponses.forEach((ranking) => {
-      ranking.pointsAwarded = -1;
+      ranking.pointsAwarded = lastPlacePoints;
     });
 
     // Update player scores
